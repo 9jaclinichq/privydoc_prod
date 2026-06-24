@@ -2,6 +2,58 @@ import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest } from "../ty
 import { DEMO_DOCTORS, DEMO_CONSULTATIONS } from "../data";
 import { generateId } from "../utils";
 
+// Supabase Configuration with default fallbacks matching your project
+const metaEnv = (import.meta as any).env || {};
+const SUPABASE_URL = metaEnv.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
+const SUPABASE_KEY = metaEnv.VITE_SUPABASE_ANON_KEY || "sb_publishable_YPVd8f31duUa_DbmehW50g_XoV4D1Si";
+
+const headers = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json"
+};
+
+// Supabase API Helpers
+async function supabaseFetch(table: string, query: string = ""): Promise<any> {
+  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`Supabase fetch failed for ${table}: ${res.statusText}`);
+  return res.json();
+}
+
+async function supabaseInsert(table: string, body: any): Promise<any> {
+  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...headers, Prefer: "return=representation" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Supabase insert failed on ${table}: ${res.statusText}`);
+  return res.json();
+}
+
+async function supabaseUpdate(table: string, matchQuery: string, body: any): Promise<any> {
+  const url = `${SUPABASE_URL}/rest/v1/${table}?${matchQuery}`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { ...headers, Prefer: "return=representation" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Supabase update failed on ${table}: ${res.statusText}`);
+  return res.json();
+}
+
+async function supabaseEdgeFunction(name: string, body: any): Promise<any> {
+  const url = `${SUPABASE_URL}/functions/v1/${name}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Edge Function ${name} failed`);
+  return res.json();
+}
+
 // LocalStorage Keys
 const KEYS = {
   DOCTORS: "privydoc_doctors",
@@ -12,6 +64,154 @@ const KEYS = {
   CURRENT_DOCTOR: "privydoc_current_doctor",
   CURRENT_ADMIN: "privydoc_current_admin"
 };
+
+// Data Mapper Utilities (Bridges database schema and client TypeScript models)
+const mapPatientToSupabase = (p: Patient) => ({
+  id: p.id,
+  phone: p.phone,
+  first_name: p.name,
+  age_dob: p.age,
+  state: p.state || null,
+  email: p.email || null,
+  pin_hash: p.pin_hash
+});
+
+const mapPatientFromSupabase = (s: any): Patient => ({
+  id: s.id,
+  name: s.first_name || s.name || "",
+  phone: s.phone,
+  age: s.age_dob || s.age || 0,
+  state: s.state || "",
+  email: s.email || "",
+  pin_hash: s.pin_hash
+});
+
+const mapDoctorToSupabase = (d: Doctor) => ({
+  id: d.id,
+  name: d.name,
+  phone: d.phone,
+  mdcn_folio: d.mdcn_folio,
+  apl_year: d.apl_year,
+  pin_hash: d.pin_hash,
+  status: d.status,
+  verified: d.verified,
+  bank_name: d.bank_name || null,
+  bank_account: d.account_number || null,
+  payout_balance: d.payout_balance
+});
+
+const mapDoctorFromSupabase = (s: any): Doctor => ({
+  id: s.id,
+  name: s.name,
+  phone: s.phone,
+  mdcn_folio: s.mdcn_folio,
+  apl_year: s.apl_year,
+  pin_hash: s.pin_hash,
+  status: s.status || "pending",
+  verified: !!s.verified,
+  bank_name: s.bank_name || "",
+  account_number: s.bank_account || s.account_number || "",
+  payout_balance: parseFloat(s.payout_balance) || 0
+});
+
+const mapConsultationToSupabase = (c: Consultation) => ({
+  id: c.id,
+  patient_id: c.patient_id,
+  patient_phone: c.patient_phone,
+  condition_id: c.condition,
+  status: c.status,
+  doctor_id: c.doctor_id || null,
+  doctor_name: c.doctor_name || null,
+  ai_summary: c.ai_summary || null,
+  doctor_notes: c.doctor_notes || null,
+  prescription: c.prescription || null,
+  amount_paid: c.amount_paid,
+  created_at: c.created_at,
+  updated_at: c.updated_at,
+  messages: c.messages,
+  form_data: {
+    first_name: c.patient_name,
+    age: c.patient_age,
+    duration: c.duration,
+    answers: c.raw_answers,
+    symptoms: c.symptoms
+  }
+});
+
+const mapConsultationFromSupabase = (s: any): Consultation => ({
+  id: s.id,
+  patient_id: s.patient_id || s.form_data?.patient_id || "",
+  patient_name: s.form_data?.first_name || s.patient_name || "Patient",
+  patient_phone: s.patient_phone,
+  patient_age: s.form_data?.age || s.patient_age || 0,
+  condition: s.condition_id || s.condition || "",
+  duration: s.form_data?.duration || s.duration || "",
+  symptoms: s.form_data?.symptoms || s.symptoms || [],
+  raw_answers: s.form_data?.answers || s.raw_answers || [],
+  status: s.status === "completed" ? "completed" : s.status === "active" ? "active" : "pending",
+  doctor_id: s.doctor_id || undefined,
+  doctor_name: s.doctor_name || undefined,
+  ai_summary: s.ai_summary || undefined,
+  doctor_notes: s.doctor_notes || undefined,
+  prescription: s.prescription || undefined,
+  amount_paid: parseFloat(s.amount_paid) || 0,
+  created_at: s.created_at || new Date().toISOString(),
+  updated_at: s.updated_at || new Date().toISOString(),
+  messages: Array.isArray(s.messages) ? s.messages : []
+});
+
+const mapPayoutToSupabase = (p: PayoutRequest) => ({
+  id: p.id,
+  doctor_id: p.doctor_id,
+  doctor_name: p.doctor_name,
+  amount: p.amount,
+  bank_name: p.bank_name,
+  account_number: p.account_number,
+  status: p.status,
+  created_at: p.created_at
+});
+
+const mapPayoutFromSupabase = (s: any): PayoutRequest => ({
+  id: s.id,
+  doctor_id: s.doctor_id,
+  doctor_name: s.doctor_name,
+  amount: parseFloat(s.amount) || 0,
+  bank_name: s.bank_name || "",
+  account_number: s.account_number || "",
+  status: s.status || "pending",
+  created_at: s.created_at || new Date().toISOString()
+});
+
+// Background Synchronizer
+export async function syncWithSupabase() {
+  try {
+    // 1. Sync Patients
+    const dbPatients = await supabaseFetch("patients");
+    if (Array.isArray(dbPatients)) {
+      localStorage.setItem(KEYS.PATIENTS, JSON.stringify(dbPatients.map(mapPatientFromSupabase)));
+    }
+
+    // 2. Sync Doctors
+    const dbDoctors = await supabaseFetch("doctors");
+    if (Array.isArray(dbDoctors)) {
+      localStorage.setItem(KEYS.DOCTORS, JSON.stringify(dbDoctors.map(mapDoctorFromSupabase)));
+    }
+
+    // 3. Sync Consultations
+    const dbConsultations = await supabaseFetch("consultations");
+    if (Array.isArray(dbConsultations)) {
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(dbConsultations.map(mapConsultationFromSupabase)));
+    }
+
+    // 4. Sync Payout Requests
+    const dbPayouts = await supabaseFetch("payout_requests");
+    if (Array.isArray(dbPayouts)) {
+      localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(dbPayouts.map(mapPayoutFromSupabase)));
+    }
+  } catch (e) {
+    console.warn("Supabase live sync is loading or unavailable. Using LocalStorage fallback.", e);
+  }
+}
 
 // Initialize LocalStorage with presets if empty
 export function initializeStorage() {
@@ -26,12 +226,15 @@ export function initializeStorage() {
   }
 }
 
-// Ensure storage is initialized on import
 initializeStorage();
+// Trigger startup database synchronization
+setTimeout(syncWithSupabase, 200);
 
 // Doctor API
 export const doctorApi = {
   getAll: (): Doctor[] => {
+    // Trigger background update
+    syncWithSupabase();
     return JSON.parse(localStorage.getItem(KEYS.DOCTORS) || "[]");
   },
   
@@ -51,7 +254,7 @@ export const doctorApi = {
       phone,
       mdcn_folio,
       apl_year,
-      pin_hash: pin, // simple mock pin hash
+      pin_hash: pin,
       status: "pending",
       verified: false,
       payout_balance: 0
@@ -59,6 +262,12 @@ export const doctorApi = {
 
     doctors.push(newDoc);
     localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+    // Replicate live to Supabase
+    supabaseInsert("doctors", mapDoctorToSupabase(newDoc)).catch(e => {
+      console.error("Live registration replicate failed:", e);
+    });
+
     return { success: true, doctor: newDoc };
   },
 
@@ -81,6 +290,12 @@ export const doctorApi = {
       doctors[index].bank_name = bankName;
       doctors[index].account_number = accountNumber;
       localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+      // Replicate update to Supabase
+      supabasePatch("doctors", id, { bank_name: bankName, account_number: accountNumber }).catch(e => {
+        console.error("Live payout update replicate failed:", e);
+      });
+
       return { success: true };
     }
     return { success: false };
@@ -90,6 +305,7 @@ export const doctorApi = {
 // Consultations API
 export const consultationApi = {
   getAll: (): Consultation[] => {
+    syncWithSupabase();
     return JSON.parse(localStorage.getItem(KEYS.CONSULTATIONS) || "[]");
   },
 
@@ -115,8 +331,6 @@ export const consultationApi = {
     amountPaid: number
   ): Promise<Consultation> => {
     const consultations = consultationApi.getAll();
-
-    // Map raw answers to readable symptom string array
     const symptoms = rawAnswers.map(ans => `${ans.question}: ${ans.answer}`);
 
     const newConsultation: Consultation = {
@@ -136,7 +350,7 @@ export const consultationApi = {
       messages: []
     };
 
-    // Request AI summary from the server backend
+    // Request AI summary from local backend
     try {
       const res = await fetch("/api/ai-summary", {
         method: "POST",
@@ -163,6 +377,12 @@ export const consultationApi = {
 
     consultations.push(newConsultation);
     localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+    // Replicate live to Supabase
+    supabaseInsert("consultations", mapConsultationToSupabase(newConsultation)).catch(e => {
+      console.error("Live consultation creation replicate failed:", e);
+    });
+
     return newConsultation;
   },
 
@@ -185,6 +405,18 @@ export const consultationApi = {
       consultations[index].messages.push(systemMsg);
 
       localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        status: "active",
+        doctor_id: docId,
+        doctor_name: docName,
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live case claim replicate failed:", e);
+      });
+
       return { success: true, consultation: consultations[index] };
     }
     return { success: false };
@@ -204,6 +436,15 @@ export const consultationApi = {
       consultations[index].messages.push(newMsg);
       consultations[index].updated_at = new Date().toISOString();
       localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live message replicate failed:", e);
+      });
+
       return { success: true, message: newMsg };
     }
     return { success: false };
@@ -227,7 +468,7 @@ export const consultationApi = {
       };
       consultations[index].messages.push(systemMsg);
 
-      // Distribute payout (e.g. 70% of assessment fee goes to doctor)
+      // Distribute payout
       const doctors = doctorApi.getAll();
       const docId = consultations[index].doctor_id;
       const docIndex = doctors.findIndex(d => d.id === docId);
@@ -235,15 +476,31 @@ export const consultationApi = {
         const share = Math.round(consultations[index].amount_paid * 0.7);
         doctors[docIndex].payout_balance += share;
         localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+        // Replicate doctor balance live to Supabase
+        supabasePatch("doctors", docId!, { payout_balance: doctors[docIndex].payout_balance }).catch(e => {
+          console.error("Live doctor balance update replicate failed:", e);
+        });
       }
 
       localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        status: "completed",
+        doctor_notes: notes,
+        prescription,
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live completion replicate failed:", e);
+      });
+
       return { success: true, consultation: consultations[index] };
     }
     return { success: false };
   },
 
-  // Calls server-side Gemini API endpoint /api/ai-assist
   generateDraftResponse: async (consultation: Consultation, draftPrompt: string): Promise<string> => {
     try {
       const res = await fetch("/api/ai-assist", {
@@ -277,6 +534,7 @@ export const consultationApi = {
 // Admin and Payouts API
 export const adminApi = {
   getAllPayouts: (): PayoutRequest[] => {
+    syncWithSupabase();
     return JSON.parse(localStorage.getItem(KEYS.PAYOUT_REQUESTS) || "[]");
   },
 
@@ -302,13 +560,20 @@ export const adminApi = {
       created_at: new Date().toISOString()
     };
 
-    // Deduct pending balance temporarily or keep balance and handle on approval
-    // Let's deduct immediately to prevent double spending
     doctors[docIndex].payout_balance -= amount;
 
     payouts.push(newRequest);
     localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(payouts));
     localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+    // Replicate live to Supabase
+    supabaseInsert("payout_requests", mapPayoutToSupabase(newRequest)).catch(e => {
+      console.error("Live payout request replicate failed:", e);
+    });
+    supabasePatch("doctors", docId, { payout_balance: doctors[docIndex].payout_balance }).catch(e => {
+      console.error("Live doctor balance deduct replicate failed:", e);
+    });
+
     return { success: true };
   },
 
@@ -318,6 +583,12 @@ export const adminApi = {
     if (index !== -1 && payouts[index].status === "pending") {
       payouts[index].status = "approved";
       localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(payouts));
+
+      // Replicate update to Supabase
+      supabasePatch("payout_requests", id, { status: "approved" }).catch(e => {
+        console.error("Live payout approval replicate failed:", e);
+      });
+
       return { success: true };
     }
     return { success: false };
@@ -335,9 +606,20 @@ export const adminApi = {
       if (docIndex !== -1) {
         doctors[docIndex].payout_balance += payouts[index].amount;
         localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+        // Replicate doctor refund live to Supabase
+        supabasePatch("doctors", payouts[index].doctor_id, { payout_balance: doctors[docIndex].payout_balance }).catch(e => {
+          console.error("Live doctor balance refund replicate failed:", e);
+        });
       }
 
       localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(payouts));
+
+      // Replicate update to Supabase
+      supabasePatch("payout_requests", id, { status: "rejected" }).catch(e => {
+        console.error("Live payout rejection replicate failed:", e);
+      });
+
       return { success: true };
     }
     return { success: false };
@@ -350,6 +632,12 @@ export const adminApi = {
       doctors[index].status = approve ? "active" : "suspended";
       doctors[index].verified = approve;
       localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+      // Replicate live to Supabase
+      supabasePatch("doctors", docId, { status: approve ? "active" : "suspended", verified: approve }).catch(e => {
+        console.error("Live clinician verification replicate failed:", e);
+      });
+
       return { success: true };
     }
     return { success: false };
@@ -359,6 +647,7 @@ export const adminApi = {
 // Patient Authentication API
 export const patientApi = {
   getAll: (): Patient[] => {
+    syncWithSupabase();
     return JSON.parse(localStorage.getItem(KEYS.PATIENTS) || "[]");
   },
 
@@ -384,6 +673,12 @@ export const patientApi = {
 
     patients.push(newPatient);
     localStorage.setItem(KEYS.PATIENTS, JSON.stringify(patients));
+
+    // Replicate live to Supabase
+    supabaseInsert("patients", mapPatientToSupabase(newPatient)).catch(e => {
+      console.error("Live patient registration replicate failed:", e);
+    });
+
     return { success: true, patient: newPatient };
   },
 
@@ -396,3 +691,8 @@ export const patientApi = {
     return { success: true, patient };
   }
 };
+
+// Internal API Request helpers to bypass REST URL params cleanly
+async function supabasePatch(table: string, id: string, body: any): Promise<any> {
+  return supabaseUpdate(table, `id=eq.${id}`, body);
+}

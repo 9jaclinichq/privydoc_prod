@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -172,6 +172,6 @@ if (isProd) {
   app.use(vite.middlewares);
 }
 
-app.listen(port, () => {
-  console.log(`PrivyDoc full-stack server running at http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`PrivyDoc full-stack server running at http://0.0.0.0:${port}`);
 });

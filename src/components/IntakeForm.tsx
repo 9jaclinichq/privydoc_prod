@@ -63,8 +63,15 @@ export default function IntakeForm({
     q => (q.category === "general" || q.category === "safety" || q.category === selectedCondition.id) && q.id !== "age"
   );
 
+  // Dynamic progress percentage for Recommendation 3
+  const demographicFilledCount = (patientName ? 1 : 0) + (patientAge ? 1 : 0) + (patientPhone ? 1 : 0);
+  const questionsAnsweredCount = relevantQuestions.filter(q => !!intakeAnswers[q.id]).length;
+  const totalQuestions = relevantQuestions.length + 3;
+  const answeredTotal = demographicFilledCount + questionsAnsweredCount;
+  const currentStepPercent = Math.min(100, Math.round((answeredTotal / totalQuestions) * 100));
+
   return (
-    <div className="max-w-xl mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-8 shadow-2xl relative overflow-hidden">
+    <div className="max-w-xl mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-8 shadow-2xl relative overflow-hidden transition-all duration-300">
       {/* Decorative top accent */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#FFF2D4] via-[#E5C158] to-[#AA7C11]" />
 
@@ -72,7 +79,7 @@ export default function IntakeForm({
       <div className="space-y-2">
         <button 
           onClick={onCancel}
-          className="text-xs font-semibold text-zinc-500 hover:text-white flex items-center gap-1 transition-colors mb-3"
+          className="text-xs font-semibold text-zinc-500 hover:text-white flex items-center gap-1 transition-all duration-200 hover:translate-x-[-2px] mb-3"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Cancel Clinical Intake
         </button>
@@ -91,6 +98,22 @@ export default function IntakeForm({
         <div className="h-1 rounded-full bg-zinc-800" />
       </div>
 
+      {/* Dynamic Survey Progress Bar (Recommendation 3) */}
+      {checkoutStep === "form" && (
+        <div className="space-y-2 pt-1">
+          <div className="flex justify-between text-[10px] font-mono text-zinc-500">
+            <span>SURVEY COMPLETION</span>
+            <span className="text-[#E5C158] font-bold">{currentStepPercent}%</span>
+          </div>
+          <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-[#E5C158] to-[#d4af37] h-full transition-all duration-300" 
+              style={{ width: `${currentStepPercent}%` }} 
+            />
+          </div>
+        </div>
+      )}
+
       {/* STEP 1: Questionnaire Intake Form */}
       {checkoutStep === "form" && (
         <form onSubmit={handleIntakeFormSubmit} className="space-y-6">
@@ -108,7 +131,7 @@ export default function IntakeForm({
                   placeholder="e.g. John Doe (or Alias)"
                   value={patientName}
                   onChange={(e) => setPatientName(e.target.value)}
-                  className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:outline-none"
+                  className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
                 />
               </div>
               <div className="space-y-2">
@@ -119,7 +142,7 @@ export default function IntakeForm({
                   placeholder="Min age: 18"
                   value={patientAge}
                   onChange={(e) => setPatientAge(e.target.value)}
-                  className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:outline-none"
+                  className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
                 />
               </div>
             </div>
@@ -132,7 +155,7 @@ export default function IntakeForm({
                 placeholder="e.g. +234 803 123 4567"
                 value={patientPhone}
                 onChange={(e) => setPatientPhone(e.target.value)}
-                className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:outline-none"
+                className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
               />
               <p className="text-[10px] text-zinc-500 font-mono">
                 CRITICAL: Used to securely log back in, receive notifications, and retrieve prescription reports.
@@ -159,7 +182,7 @@ export default function IntakeForm({
                     placeholder={q.placeholder || "Enter clinical details..."}
                     value={intakeAnswers[q.id] || ""}
                     onChange={(e) => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                    className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-zinc-200 focus:border-[#d4af37] focus:outline-none"
+                    className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-zinc-200 focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
                   />
                 )}
 
@@ -170,7 +193,7 @@ export default function IntakeForm({
                         type="button"
                         key={opt}
                         onClick={() => setIntakeAnswers(prev => ({ ...prev, [q.id]: opt }))}
-                        className={`px-4 py-3 rounded-xl border text-left text-xs font-medium transition-all ${
+                        className={`px-4 py-3 rounded-xl border text-left text-xs font-medium transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] ${
                           intakeAnswers[q.id] === opt 
                             ? "bg-[#d4af37]/10 border-[#d4af37] text-[#E5C158]" 
                             : "bg-black border-zinc-900 hover:border-zinc-800 text-zinc-400"
@@ -200,7 +223,7 @@ export default function IntakeForm({
                             }
                             setIntakeAnswers(prev => ({ ...prev, [q.id]: updated.join(", ") }));
                           }}
-                          className={`px-4 py-3 rounded-xl border text-left text-xs font-medium transition-all flex justify-between items-center ${
+                          className={`px-4 py-3 rounded-xl border text-left text-xs font-medium transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] flex justify-between items-center ${
                             isSelected 
                               ? "bg-[#d4af37]/10 border-[#d4af37] text-[#E5C158]" 
                               : "bg-black border-zinc-900 hover:border-zinc-800 text-zinc-400"
@@ -227,7 +250,7 @@ export default function IntakeForm({
 
           <button
             type="submit"
-            className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl transition-all text-xs shadow-lg flex items-center justify-center gap-2"
+            className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] hover:scale-[1.01] hover:border-[#d4af37]/20 active:scale-[0.99] text-black font-extrabold rounded-xl transition-all duration-200 text-xs shadow-lg flex items-center justify-center gap-2"
           >
             Proceed to Secure Payment <ChevronRight className="w-4 h-4" />
           </button>
@@ -257,7 +280,7 @@ export default function IntakeForm({
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => setPaymentMethod("card")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2 font-bold text-xs transition-all ${
+                className={`p-4 rounded-xl border flex flex-col items-center gap-2 font-bold text-xs transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] ${
                   paymentMethod === "card" 
                     ? "bg-[#d4af37]/10 border-[#d4af37] text-[#E5C158]" 
                     : "bg-black border-zinc-900 text-zinc-500 hover:border-zinc-800"
@@ -268,7 +291,7 @@ export default function IntakeForm({
               </button>
               <button
                 onClick={() => setPaymentMethod("bank")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2 font-bold text-xs transition-all ${
+                className={`p-4 rounded-xl border flex flex-col items-center gap-2 font-bold text-xs transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] ${
                   paymentMethod === "bank" 
                     ? "bg-[#d4af37]/10 border-[#d4af37] text-[#E5C158]" 
                     : "bg-black border-zinc-900 text-zinc-500 hover:border-zinc-800"
@@ -289,16 +312,16 @@ export default function IntakeForm({
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase font-mono text-zinc-400 block">Confidential Card Number</label>
-                <input type="text" placeholder="5061 0000 0000 0000" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:outline-none" />
+                <input type="text" placeholder="5061 0000 0000 0000" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-mono text-zinc-400 block">Expiry Month/Year</label>
-                  <input type="text" placeholder="MM/YY" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:outline-none" />
+                  <input type="text" placeholder="MM/YY" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase font-mono text-zinc-400 block">CVV Pin</label>
-                  <input type="password" placeholder="***" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:outline-none" />
+                  <input type="password" placeholder="***" className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300" />
                 </div>
               </div>
             </div>
@@ -324,7 +347,7 @@ export default function IntakeForm({
             <button
               onClick={onCompletePayment}
               disabled={isSubmittingIntake}
-              className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl transition-all text-xs shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] hover:scale-[1.01] hover:border-[#d4af37]/20 active:scale-[0.99] text-black font-extrabold rounded-xl transition-all duration-200 text-xs shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isSubmittingIntake ? (
                 <span>Interrogating Gateway...</span>

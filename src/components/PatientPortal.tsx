@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Consultation } from "../types";
 import { jsPDF } from "jspdf";
+import { renderRichText } from "../utils";
 
 interface PatientPortalProps {
   selectedCase: Consultation | null;
@@ -118,7 +119,11 @@ export default function PatientPortal({
       doc.setFontSize(9);
       doc.setTextColor(64, 64, 64);
 
-      const evalNotes = con.doctor_notes || `Patient presented symptoms of ${con.condition} over a recorded duration of ${con.duration}. Digital intake was thoroughly analyzed for systemic cardiovascular contraindications. Patient exhibits normal respiratory/exercise parameters with no chest pain or nitrate interactions reported. Prescribing support remedies as appropriate.`;
+      const evalNotesRaw = con.doctor_notes || `Patient presented symptoms of ${con.condition} over a recorded duration of ${con.duration}. Digital intake was thoroughly analyzed for systemic cardiovascular contraindications. Patient exhibits normal respiratory/exercise parameters with no chest pain or nitrate interactions reported. Prescribing support remedies as appropriate.`;
+      const evalNotes = evalNotesRaw
+        .replace(/\*\*/g, "")
+        .replace(/\*/g, "")
+        .replace(/•/g, "  - ");
       const splitNotes = doc.splitTextToSize(evalNotes, 178);
       doc.text(splitNotes, 14, 85);
 
@@ -143,7 +148,11 @@ export default function PatientPortal({
       doc.setFontSize(10);
       doc.setTextColor(21, 21, 21);
 
-      const prescriptionBody = con.prescription || "Clinical prescription not required at this time. Recommended: Daily exercise and pelvic floor support.";
+      const prescriptionBodyRaw = con.prescription || "Clinical prescription not required at this time. Recommended: Daily exercise and pelvic floor support.";
+      const prescriptionBody = prescriptionBodyRaw
+        .replace(/\*\*/g, "")
+        .replace(/\*/g, "")
+        .replace(/•/g, "  - ");
       const splitPrescription = doc.splitTextToSize(prescriptionBody, 155);
       doc.text(splitPrescription, 32, rxHeaderY + 12);
 
@@ -219,10 +228,24 @@ export default function PatientPortal({
         </div>
       ) : (
         /* 2. GLORIOUS TABLET / LAPTOP SIDEBAR DASHBOARD */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in pb-20 lg:pb-0">
           
+          {/* Mobile Top Header (Recommendation 4) */}
+          <div className="lg:hidden flex justify-between items-center bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+            <div>
+              <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500 font-bold">PrivyDoc Vault</p>
+              <h4 className="text-xs font-bold text-[#E5C158] truncate max-w-[150px]">{selectedCase.patient_name}</h4>
+            </div>
+            <button 
+              onClick={() => setSelectedCase(null)}
+              className="px-2.5 py-1 text-[10px] font-bold border border-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors"
+            >
+              Log Out
+            </button>
+          </div>
+
           {/* Side Navbar Controls (Desktop View) */}
-          <div className="lg:col-span-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-6">
+          <div className="hidden lg:block lg:col-span-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-6">
             <div className="pb-4 border-b border-zinc-900 flex justify-between items-center">
               <div>
                 <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Confidential Portal</p>
@@ -284,6 +307,46 @@ export default function PatientPortal({
               <p>Encryption: AES-256</p>
               <p>License Status: VERIFIED</p>
             </div>
+          </div>
+
+          {/* Mobile Sticky Bottom Tab Bar (Recommendation 4) */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-t border-zinc-900 px-4 py-3 flex justify-around items-center">
+            <button
+              onClick={() => setActiveSidebarTab("dashboard")}
+              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
+                activeSidebarTab === "dashboard" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
+              }`}
+            >
+              <Activity className="w-5 h-5" />
+              <span>Dashboard</span>
+            </button>
+            <button
+              onClick={() => setActiveSidebarTab("cases")}
+              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
+                activeSidebarTab === "cases" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
+              }`}
+            >
+              <Clock className="w-5 h-5" />
+              <span>Cases</span>
+            </button>
+            <button
+              onClick={() => setActiveSidebarTab("messages")}
+              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
+                activeSidebarTab === "messages" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
+              }`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span>Messages</span>
+            </button>
+            <button
+              onClick={() => setActiveSidebarTab("reports")}
+              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
+                activeSidebarTab === "reports" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Reports/Rx</span>
+            </button>
           </div>
 
           {/* Center Main Dashboard Panels */}
@@ -567,15 +630,15 @@ export default function PatientPortal({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                       <div className="space-y-1.5">
                         <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 font-bold block">Doctor Notes</label>
-                        <p className="text-xs text-zinc-300 italic leading-relaxed bg-black p-4 rounded-xl border border-zinc-900">
-                          {selectedCase.doctor_notes || "Your assessment is complete. Follow lifestyle remedies and pharmaceutical advice detailed in this panel."}
-                        </p>
+                        <div className="text-xs text-zinc-300 leading-relaxed bg-black p-4 rounded-xl border border-zinc-900 min-h-[100px] max-h-[300px] overflow-y-auto space-y-1.5">
+                          {selectedCase.doctor_notes ? renderRichText(selectedCase.doctor_notes) : <p className="italic text-zinc-500">Your assessment is complete. Follow lifestyle remedies and pharmaceutical advice detailed in this panel.</p>}
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] uppercase font-mono tracking-widest text-[#E5C158] font-bold block">Issued Pharmaceutical Rx</label>
-                        <pre className="text-xs font-mono text-white bg-black p-4 rounded-xl border border-zinc-900 leading-relaxed whitespace-pre-wrap">
-                          {selectedCase.prescription || "No active prescription required."}
-                        </pre>
+                        <div className="text-xs font-mono text-white bg-black p-4 rounded-xl border border-zinc-900 leading-relaxed min-h-[100px] max-h-[300px] overflow-y-auto space-y-1 text-left">
+                          {selectedCase.prescription ? renderRichText(selectedCase.prescription) : "No active prescription required."}
+                        </div>
                       </div>
                     </div>
                   </div>

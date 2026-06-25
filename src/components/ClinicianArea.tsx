@@ -1,10 +1,12 @@
 import React from "react";
 import { 
   Shield, Key, Lock, Users, Sparkles, Send, FileText, 
-  Wallet, ArrowRight, HelpCircle, Activity, Building, LogOut, CheckCircle, Clock 
+  Wallet, ArrowRight, HelpCircle, Activity, Building, LogOut, CheckCircle, Clock,
+  Bold, Italic, List
 } from "lucide-react";
 import { Doctor, Consultation } from "../types";
 import { consultationApi, doctorApi } from "../lib/api";
+import { renderRichText } from "../utils";
 
 interface ClinicianAreaProps {
   currentDoctor: Doctor | null;
@@ -127,6 +129,82 @@ export default function ClinicianArea({
   formatNaira,
   triggerRefresh
 }: ClinicianAreaProps) {
+  
+  // Rich-text editor local states & helpers
+  const [notesMode, setNotesMode] = React.useState<"edit" | "preview">("edit");
+  const [prescriptionMode, setPrescriptionMode] = React.useState<"edit" | "preview">("edit");
+
+  const noteTemplates = [
+    {
+      name: "Mild PE Profile",
+      text: "Patient presents with mild premature ejaculation (intromission duration approx 1.5 - 2 mins). No signs of erectile dysfunction or structural abnormalities. Recommended stop-start therapy and pelvic floor muscle conditioning."
+    },
+    {
+      name: "ED Clearance",
+      text: "Thorough assessment of patient history shows mild situational erectile weakness. Evaluated cardiac and blood pressure parameters; clear of active organic contraindications. Cleared for on-demand therapy."
+    },
+    {
+      name: "Lifestyle & Stress",
+      text: "Comprehensive lifestyle assessment completed. Advised reduction of performance-related stress triggers. Issued directives on mindfulness-based physical conditioning, breathing exercises, and scheduling follow-up in 14 days."
+    }
+  ];
+
+  const prescriptionTemplates = [
+    {
+      name: "Sildenafil 50mg",
+      text: "• Sildenafil (Viagra) 50mg Tablets\n• Take 1 tablet orally on an empty stomach approximately 45-60 minutes before scheduled intimate activity.\n• Maximum dosing frequency: 1 tablet per 24 hours.\n• WARNING: Do not combine with nitrate-based cardiovascular drugs."
+    },
+    {
+      name: "Tadalafil 5mg Daily",
+      text: "• Tadalafil (Cialis) 5mg Tablets\n• Take 1 tablet orally at the same time each day, regardless of timing of intimate activity.\n• Maintain continuous daily administration to ensure stable systemic levels.\n• WARNING: Strictly contraindicated with any form of organic nitrates."
+    },
+    {
+      name: "Dapoxetine 30mg On-Demand",
+      text: "• Dapoxetine (Priligy) 30mg Tablets\n• Take 1 tablet orally with a full glass of water, 1 to 3 hours prior to intimate activity.\n• Indicated for performance control and delaying ejaculation.\n• Use on-demand only; do not exceed 1 tablet in 24 hours."
+    }
+  ];
+
+  const handleFormat = (
+    field: "notes" | "rx",
+    type: "bold" | "italic" | "bullet"
+  ) => {
+    const elementId = field === "notes" ? "closing-notes-textarea" : "closing-rx-textarea";
+    const textarea = document.getElementById(elementId) as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+
+    let replacement = "";
+    let cursorOffset = 0;
+
+    if (type === "bold") {
+      replacement = `**${selectedText || "bold text"}**`;
+      cursorOffset = selectedText ? replacement.length : 2;
+    } else if (type === "italic") {
+      replacement = `*${selectedText || "italic text"}*`;
+      cursorOffset = selectedText ? replacement.length : 1;
+    } else if (type === "bullet") {
+      const prefix = text.length === 0 || text.substring(start - 1, start) === "\n" ? "" : "\n";
+      replacement = `${prefix}• ${selectedText || "list item"}`;
+      cursorOffset = selectedText ? replacement.length : prefix.length + 2;
+    }
+
+    const newValue = text.substring(0, start) + replacement + text.substring(end);
+    
+    if (field === "notes") {
+      setClosingNotes(newValue);
+    } else {
+      setClosingPrescription(newValue);
+    }
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+    }, 0);
+  };
   
   // Re-fetch calculations inside context
   const activeConsultations = consultationApi.getAll();
@@ -478,26 +556,179 @@ export default function ClinicianArea({
                               <h5 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Complete Consultation & Sign Rx</h5>
                             </div>
                             
-                            <div className="space-y-3.5">
+                            <div className="space-y-4">
+                              {/* Clinical Notes Editor */}
                               <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">Reviewer Clinical Notes</label>
-                                <textarea
-                                  placeholder="Type diagnosis notes..."
-                                  rows={2}
-                                  value={closingNotes}
-                                  onChange={(e) => setClosingNotes(e.target.value)}
-                                  className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
-                                />
+                                <div className="flex justify-between items-center">
+                                  <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-bold">Reviewer Clinical Notes</label>
+                                  <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setNotesMode("edit")}
+                                      className={`px-2 py-0.5 text-[9.5px] font-bold rounded-md transition-all ${
+                                        notesMode === "edit" ? "bg-zinc-800 text-[#E5C158]" : "text-zinc-500 hover:text-zinc-400"
+                                      }`}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setNotesMode("preview")}
+                                      className={`px-2 py-0.5 text-[9.5px] font-bold rounded-md transition-all ${
+                                        notesMode === "preview" ? "bg-zinc-800 text-[#E5C158]" : "text-zinc-500 hover:text-zinc-400"
+                                      }`}
+                                    >
+                                      Preview
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {notesMode === "edit" ? (
+                                  <div className="bg-black border border-zinc-900 rounded-xl overflow-hidden focus-within:border-[#d4af37] transition-all">
+                                    {/* Toolbar */}
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950 border-b border-zinc-900 overflow-x-auto scrollbar-none">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("notes", "bold")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Bold"
+                                      >
+                                        <Bold className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("notes", "italic")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Italic"
+                                      >
+                                        <Italic className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("notes", "bullet")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Bullet List"
+                                      >
+                                        <List className="w-3.5 h-3.5" />
+                                      </button>
+                                      
+                                      <div className="h-4 w-px bg-zinc-800 mx-1" />
+                                      
+                                      <span className="text-[8.5px] uppercase font-mono tracking-wider text-zinc-500 font-bold mr-1 shrink-0">Quick Notes:</span>
+                                      <div className="flex gap-1 overflow-x-auto scrollbar-none">
+                                        {noteTemplates.map((tpl, i) => (
+                                          <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => setClosingNotes(tpl.text)}
+                                            className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-850 hover:text-white text-zinc-400 text-[8.5px] rounded border border-zinc-800 transition-colors whitespace-nowrap"
+                                          >
+                                            {tpl.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <textarea
+                                      id="closing-notes-textarea"
+                                      placeholder="Type diagnosis notes... Use **bold**, *italics*, or bullet list points (lines starting with •)."
+                                      rows={3}
+                                      value={closingNotes}
+                                      onChange={(e) => setClosingNotes(e.target.value)}
+                                      className="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none resize-none"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-zinc-300 min-h-[96px] leading-relaxed max-h-40 overflow-y-auto">
+                                    {closingNotes.trim() ? renderRichText(closingNotes) : <span className="text-zinc-600 italic">No notes typed yet. Click Edit to begin writing.</span>}
+                                  </div>
+                                )}
                               </div>
+
+                              {/* Prescription (Rx) Editor */}
                               <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block">Pharmaceutical Prescription (Rx details)</label>
-                                <textarea
-                                  placeholder="e.g. Sildenafil 50mg, Tab 1 to be taken as directed..."
-                                  rows={2}
-                                  value={closingPrescription}
-                                  onChange={(e) => setClosingPrescription(e.target.value)}
-                                  className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37] font-mono"
-                                />
+                                <div className="flex justify-between items-center">
+                                  <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-bold">Pharmaceutical Prescription (Rx details)</label>
+                                  <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrescriptionMode("edit")}
+                                      className={`px-2 py-0.5 text-[9.5px] font-bold rounded-md transition-all ${
+                                        prescriptionMode === "edit" ? "bg-zinc-800 text-[#E5C158]" : "text-zinc-500 hover:text-zinc-400"
+                                      }`}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPrescriptionMode("preview")}
+                                      className={`px-2 py-0.5 text-[9.5px] font-bold rounded-md transition-all ${
+                                        prescriptionMode === "preview" ? "bg-zinc-800 text-[#E5C158]" : "text-zinc-500 hover:text-zinc-400"
+                                      }`}
+                                    >
+                                      Preview
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {prescriptionMode === "edit" ? (
+                                  <div className="bg-black border border-zinc-900 rounded-xl overflow-hidden focus-within:border-[#d4af37] transition-all">
+                                    {/* Toolbar */}
+                                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-950 border-b border-zinc-900 overflow-x-auto scrollbar-none">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("rx", "bold")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Bold"
+                                      >
+                                        <Bold className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("rx", "italic")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Italic"
+                                      >
+                                        <Italic className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleFormat("rx", "bullet")}
+                                        className="p-1 text-zinc-400 hover:text-[#E5C158] hover:bg-zinc-900 rounded transition-colors"
+                                        title="Bullet List"
+                                      >
+                                        <List className="w-3.5 h-3.5" />
+                                      </button>
+                                      
+                                      <div className="h-4 w-px bg-zinc-800 mx-1" />
+                                      
+                                      <span className="text-[8.5px] uppercase font-mono tracking-wider text-zinc-500 font-bold mr-1 shrink-0">Rx Presets:</span>
+                                      <div className="flex gap-1 overflow-x-auto scrollbar-none">
+                                        {prescriptionTemplates.map((tpl, i) => (
+                                          <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => setClosingPrescription(tpl.text)}
+                                            className="px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-850 hover:text-white text-zinc-400 text-[8.5px] rounded border border-zinc-800 transition-colors whitespace-nowrap"
+                                          >
+                                            {tpl.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <textarea
+                                      id="closing-rx-textarea"
+                                      placeholder="e.g. Sildenafil 50mg, Tab 1 to be taken as directed... Format with bold and bullet lists."
+                                      rows={3}
+                                      value={closingPrescription}
+                                      onChange={(e) => setClosingPrescription(e.target.value)}
+                                      className="w-full bg-transparent px-3 py-2 text-xs text-white focus:outline-none resize-none font-mono"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-zinc-300 min-h-[96px] leading-relaxed max-h-40 overflow-y-auto font-mono">
+                                    {closingPrescription.trim() ? renderRichText(closingPrescription) : <span className="text-zinc-600 italic">No prescription issued. Click Edit to prescribe.</span>}
+                                  </div>
+                                )}
                               </div>
 
                               <button

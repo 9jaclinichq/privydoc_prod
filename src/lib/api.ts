@@ -292,7 +292,7 @@ export const doctorApi = {
       localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
 
       // Replicate update to Supabase
-      supabasePatch("doctors", id, { bank_name: bankName, account_number: accountNumber }).catch(e => {
+      supabasePatch("doctors", id, { bank_name: bankName, bank_account: accountNumber }).catch(e => {
         console.error("Live payout update replicate failed:", e);
       });
 

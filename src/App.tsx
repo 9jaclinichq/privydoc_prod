@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, Check } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
-import { doctorApi, consultationApi, adminApi, patientApi } from "./lib/api";
+import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
 import { formatNaira, formatDate } from "./utils";
 
@@ -20,6 +20,10 @@ export default function App() {
   const [patientSubView, setPatientSubView] = useState<"landing" | "register" | "otp" | "pinSetup" | "login" | "symptom" | "intake" | "portal">("landing");
   const [showHiddenRoles, setShowHiddenRoles] = useState(false);
   const [logoClicks, setLogoClicks] = useState(0);
+
+  // Compliance and Alert Pre-Permissions states
+  const [permissionModal, setPermissionModal] = useState<"location" | "notifications" | null>(null);
+  const [pendingCondition, setPendingCondition] = useState<typeof MEN_HEALTH_CONDITIONS[0] | null>(null);
 
   // Patient session / authentication states
   const [patientSession, setPatientSession] = useState<Patient | null>(() => {
@@ -92,7 +96,7 @@ export default function App() {
   // Admin states
   const [adminPin, setAdminPin] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase">("verifications");
+  const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing">("verifications");
 
   // Refresh lists helper
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -107,6 +111,75 @@ export default function App() {
     }
   }, [refreshTrigger]);
 
+  // Synchronize state with browser history for back button navigation
+  useEffect(() => {
+    // Push initial state
+    if (!window.history.state) {
+      window.history.replaceState({ activeTab, patientSubView, selectedCaseId: selectedCase?.id, docView, adminView }, "");
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        const state = event.state;
+        if (state.activeTab) setActiveTab(state.activeTab);
+        if (state.patientSubView) setPatientSubView(state.patientSubView);
+        if (state.docView) setDocView(state.docView);
+        if (state.adminView) setAdminView(state.adminView);
+        if (state.selectedCaseId) {
+          const c = consultationApi.getById(state.selectedCaseId);
+          if (c) setSelectedCase(c);
+        } else {
+          setSelectedCase(null);
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  // Whenever key navigation state changes, push state to history
+  useEffect(() => {
+    const currentState = window.history.state;
+    const stateMatches = currentState &&
+      currentState.activeTab === activeTab &&
+      currentState.patientSubView === patientSubView &&
+      currentState.selectedCaseId === selectedCase?.id &&
+      currentState.docView === docView &&
+      currentState.adminView === adminView;
+
+    if (!stateMatches) {
+      window.history.pushState({
+        activeTab,
+        patientSubView,
+        selectedCaseId: selectedCase?.id,
+        docView,
+        adminView
+      }, "");
+    }
+  }, [activeTab, patientSubView, selectedCase?.id, docView, adminView]);
+
+  // Prevent accidental browser exit when in the middle of an intake form or active consultation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const isFillingIntake = activeTab === "patient" && patientSubView === "intake" && checkoutStep !== "success";
+      const isClinicianActive = activeTab === "clinician" && currentDoctor && selectedDoctorCase && selectedDoctorCase.status !== "completed";
+      
+      if (isFillingIntake || isClinicianActive) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to exit?";
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [activeTab, patientSubView, checkoutStep, currentDoctor, selectedDoctorCase]);
+
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
   // Symptom checker selector
@@ -119,8 +192,13 @@ export default function App() {
     }
   };
 
-  // Start Clinical Intake Form
+  // Start Clinical Intake Form (triggers compliance pre-permission)
   const handleStartIntake = (condition: typeof MEN_HEALTH_CONDITIONS[0]) => {
+    setPendingCondition(condition);
+    setPermissionModal("location");
+  };
+
+  const proceedWithIntake = (condition: typeof MEN_HEALTH_CONDITIONS[0]) => {
     setSelectedCondition(condition);
     setIntakeAnswers({});
     
@@ -151,6 +229,7 @@ export default function App() {
       }));
 
     try {
+      const currentBasePrice = pricingApi.getById("base_consultation")?.price ?? 7500;
       const newConsultation = await consultationApi.create(
         patientName,
         patientPhone,
@@ -158,7 +237,7 @@ export default function App() {
         selectedCondition.title,
         intakeAnswers["duration"] || "3-6 months",
         answers,
-        selectedCondition.basePrice
+        currentBasePrice
       );
       
       setCheckoutStep("success");
@@ -207,6 +286,22 @@ export default function App() {
       alert("Please fill in all clinical registration details and accept the patient consent.");
       return;
     }
+
+    // Validate Name
+    const nameTrimmed = regName.trim();
+    if (!nameTrimmed.includes(" ") || nameTrimmed.split(/\s+/).length < 2) {
+      alert("Please enter both your first name and last name for clinical prescription eligibility.");
+      return;
+    }
+
+    // Validate Phone Number
+    const cleanedPhone = regPhone.replace(/[\s\-\(\)]/g, "");
+    const phoneRegex = /^(\+?234|0)[789][01]\d{8}$/;
+    if (!phoneRegex.test(cleanedPhone)) {
+      alert("Invalid phone format. Please enter a valid Nigerian WhatsApp number (e.g., +234 803 123 4567 or 08031234567).");
+      return;
+    }
+
     const ageNum = parseInt(regAge);
     if (isNaN(ageNum) || ageNum < 18) {
       alert("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
@@ -267,12 +362,16 @@ export default function App() {
         setPatientAge(res.patient.age.toString());
         setCheckoutStep("form");
         setPatientSubView("intake");
-      } else if (cases.length > 0) {
-        setSelectedCase(cases[0]);
-        setPatientSubView("portal");
       } else {
-        setSelectedCase(null);
+        if (cases.length > 0) {
+          setSelectedCase(cases[0]);
+        } else {
+          setSelectedCase(null);
+        }
         setPatientSubView("portal");
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+          setPermissionModal("notifications");
+        }
       }
     } else {
       alert(res.error || "Failed to establish secure patient profile.");
@@ -295,12 +394,16 @@ export default function App() {
         setPatientAge(res.patient.age.toString());
         setCheckoutStep("form");
         setPatientSubView("intake");
-      } else if (cases.length > 0) {
-        setSelectedCase(cases[0]);
-        setPatientSubView("portal");
       } else {
-        setSelectedCase(null);
+        if (cases.length > 0) {
+          setSelectedCase(cases[0]);
+        } else {
+          setSelectedCase(null);
+        }
         setPatientSubView("portal");
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+          setPermissionModal("notifications");
+        }
       }
     } else {
       alert(res.error || "PIN authentication rejected.");
@@ -569,39 +672,89 @@ export default function App() {
             {patientSubView === "register" && (
               <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-6 shadow-2xl animate-fade-in relative">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-[#d4af37]" />
+                
+                {/* Back Button to prevent strandings */}
+                <div className="flex justify-between items-center">
+                  <button 
+                    type="button"
+                    onClick={() => setPatientSubView("landing")}
+                    className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition-colors text-xs font-bold font-mono"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to Programs
+                  </button>
+                </div>
+
                 <div className="text-center space-y-2">
                   <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Create Secure Patient Profile</h4>
                   <p className="text-xs text-zinc-500 font-sans">Establish your private, confidential clinical folder.</p>
                 </div>
                 
                 <form onSubmit={handlePatientRegisterSubmit} className="space-y-4">
+                  
+                  {/* Full Name Input */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Full Name</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                        Full Name
+                        <span className="relative group inline-block">
+                          <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-52 text-center leading-normal z-50 shadow-2xl">
+                            Enter your legal name as on bank/ID records to ensure clinical prescription validity.
+                          </span>
+                        </span>
+                      </label>
+                      <span className="text-[9px] text-zinc-600 font-mono">Example: Adebayo Okafor</span>
+                    </div>
                     <input 
                       type="text"
                       required
-                      placeholder="e.g. Chukwuma Obi"
+                      placeholder="e.g. Adebayo Okafor"
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
-                      className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700"
+                      className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 transition-colors"
                     />
+                    <p className="text-[9.5px] text-zinc-600 font-sans">Must match identification records if clinical prescriptions are issued.</p>
                   </div>
 
+                  {/* Confidential WhatsApp Number Input */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Confidential WhatsApp Number</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                        Confidential WhatsApp Number
+                        <span className="relative group inline-block">
+                          <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-52 text-center leading-normal z-50 shadow-2xl">
+                            Serves as your unique identifier to safely retrieve consult files and digital prescriptions.
+                          </span>
+                        </span>
+                      </label>
+                      <span className="text-[9px] text-zinc-600 font-mono">Example: +234 803 123 4567</span>
+                    </div>
                     <input 
                       type="tel"
                       required
                       placeholder="e.g. +234 803 123 4567"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
-                      className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono"
+                      className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono transition-colors"
                     />
+                    <p className="text-[9.5px] text-zinc-600 font-sans">Used exclusively for secure vault verification and notifications.</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
+                    {/* Age Input */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Age (Min 18)</label>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                          Age (Min 18)
+                          <span className="relative group inline-block">
+                            <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-40 text-center leading-normal z-50 shadow-2xl">
+                              Consultations are strictly restricted to adults aged 18+ under MDCN regulations.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
                       <input 
                         type="number"
                         required
@@ -610,37 +763,64 @@ export default function App() {
                         placeholder="Age"
                         value={regAge}
                         onChange={(e) => setRegAge(e.target.value)}
-                        className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono"
+                        className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono transition-colors"
                       />
+                      <p className="text-[9px] text-zinc-600 font-sans">Min: 18, Max: 120.</p>
                     </div>
 
+                    {/* State Input */}
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">State of Residence</label>
+                      <div className="flex items-center gap-1">
+                        <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                          State
+                          <span className="relative group inline-block">
+                            <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-40 text-center leading-normal z-50 shadow-2xl">
+                              Required for demographic logging and local pharmacy dispatch coordination.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
                       <select
                         required
                         value={regState}
                         onChange={(e) => setRegState(e.target.value)}
-                        className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none"
+                        className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none transition-colors"
                       >
                         <option value="">Select State</option>
                         {["Lagos", "Abuja FCT", "Rivers", "Oyo", "Kano", "Anambra", "Delta", "Kaduna", "Edo", "Enugu", "Ogun", "Ondo", "Imo", "Kwara", "Plateau", "Akwa Ibom"].map(st => (
                           <option key={st} value={st}>{st}</option>
                         ))}
                       </select>
+                      <p className="text-[9px] text-zinc-600 font-sans">Current residence state.</p>
                     </div>
                   </div>
 
+                  {/* Email Input */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Email Address (Optional)</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                        Email Address (Optional)
+                        <span className="relative group inline-block">
+                          <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-52 text-center leading-normal z-50 shadow-2xl">
+                            Used optionally to receive duplicate backup notifications of your diagnostic outcomes.
+                          </span>
+                        </span>
+                      </label>
+                      <span className="text-[9px] text-zinc-600 font-mono">Example: patient@domain.com</span>
+                    </div>
                     <input 
                       type="email"
                       placeholder="e.g. name@example.com"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700"
+                      className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 transition-colors"
                     />
+                    <p className="text-[9.5px] text-zinc-600 font-sans">For secure duplicate clinical records distribution.</p>
                   </div>
 
+                  {/* Consent Checkbox */}
                   <div className="flex items-start gap-3 pt-2">
                     <input 
                       id="consent"
@@ -1003,20 +1183,24 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-zinc-900/80 bg-black/40 py-6 px-6 text-center text-[10px] text-zinc-600 font-mono selection:bg-transparent space-y-3">
-        <p>© {new Date().getFullYear()} <span className="cursor-pointer hover:text-zinc-400 select-none" onClick={() => setShowHiddenRoles(p => !p)}>PrivyDoc</span>. Verified Medical Telehealth. All rights reserved.</p>
-        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-zinc-500">
-          <button onClick={() => setLegalModalOpen("privacy")} className="hover:text-zinc-300 transition-colors">Privacy Policy</button>
-          <span>•</span>
-          <button onClick={() => setLegalModalOpen("terms")} className="hover:text-zinc-300 transition-colors">Terms of Use</button>
-          <span>•</span>
-          <button onClick={() => setLegalModalOpen("medical")} className="hover:text-zinc-300 transition-colors">Medical Disclaimer</button>
-          <span>•</span>
-          <button onClick={() => setLegalModalOpen("ndpr")} className="hover:text-zinc-300 transition-colors">NDPR Standard</button>
-          <span>•</span>
-          <button onClick={() => setLegalModalOpen("refund")} className="hover:text-zinc-300 transition-colors">Refund Guidelines</button>
+      <footer className="border-t border-zinc-900/40 bg-zinc-950/20 py-3.5 px-4 text-center text-[9px] text-zinc-600 font-mono selection:bg-transparent">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-left">
+          <p className="text-center md:text-left">
+            © {new Date().getFullYear()} <span className="cursor-pointer hover:text-zinc-400 transition-colors select-none font-bold" onClick={() => setShowHiddenRoles(p => !p)}>PrivyDoc</span> • <span className="text-zinc-500 font-sans font-medium">Verified Telehealth</span>
+          </p>
+          <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-zinc-500 text-[9.5px]">
+            <button onClick={() => setLegalModalOpen("privacy")} className="hover:text-zinc-300 transition-colors">Privacy Policy</button>
+            <span className="text-zinc-700">•</span>
+            <button onClick={() => setLegalModalOpen("terms")} className="hover:text-zinc-300 transition-colors">Terms of Use</button>
+            <span className="text-zinc-700">•</span>
+            <button onClick={() => setLegalModalOpen("medical")} className="hover:text-zinc-300 transition-colors">Disclaimer</button>
+            <span className="text-zinc-700">•</span>
+            <button onClick={() => setLegalModalOpen("ndpr")} className="hover:text-zinc-300 transition-colors">NDPR</button>
+            <span className="text-zinc-700">•</span>
+            <button onClick={() => setLegalModalOpen("refund")} className="hover:text-zinc-300 transition-colors">Refunds</button>
+          </div>
+          <p className="text-[8.5px] opacity-75 text-zinc-600 hover:text-zinc-500 transition-colors">AES-256 Tunnel • MDCN Telemedicine Compliant</p>
         </div>
-        <p className="opacity-75">100% Secure AES-256 Client-Server Tunnel. Telemedicine Practice Standards Compliant.</p>
       </footer>
     </div>
 
@@ -1063,7 +1247,7 @@ export default function App() {
             )}
             {legalModalOpen === "refund" && (
               <>
-                <p>Due to the direct provision of clinical services by licensed medical physicians, consultation fees (₦7,500 base, ₦3,500 review) are non-refundable once a physician claims your file.</p>
+                <p>Due to the direct provision of clinical services by licensed medical physicians, consultation fees ({formatNaira(pricingApi.getById("base_consultation")?.price ?? 7500)} base, {formatNaira(pricingApi.getById("review_consultation")?.price ?? 3500)} review) are non-refundable once a physician claims your file.</p>
                 <p>If your payment succeeded but did not update your secure vault due to an internet drop or technical failure, please email <strong>hello@privydoc.com.ng</strong> with transaction details for immediate assistance.</p>
               </>
             )}
@@ -1074,6 +1258,130 @@ export default function App() {
           >
             Close Document
           </button>
+        </div>
+      </div>
+    )}
+
+    {/* BRANDED PRE-PERMISSION MODAL */}
+    {permissionModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+        <div className="relative max-w-md w-full bg-zinc-950 border border-zinc-900 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl overflow-hidden text-zinc-200">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#d4af37] to-[#b8860b]" />
+          
+          {permissionModal === "location" ? (
+            <>
+              <div className="text-center space-y-3">
+                <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
+                  <MapPin className="w-6 h-6 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  MDCN CLINICAL COMPLIANCE CHECK
+                </h3>
+                <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
+                  Jurisdiction Audit
+                </span>
+                <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
+                  Under clinical guidelines established by the <strong className="text-zinc-300">Medical and Dental Council of Nigeria (MDCN)</strong> for telemedicine, physicians are strictly licensed to evaluate patients physically residing in Nigeria.
+                </p>
+                <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                  PrivyDoc requires a secure, one-time geographical check before initiating your private consultation dossier. Your precise coordinates are never stored or logged permanently.
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                          setPermissionModal(null);
+                          if (pendingCondition) {
+                            const cond = pendingCondition;
+                            setPendingCondition(null);
+                            proceedWithIntake(cond);
+                          }
+                        },
+                        (err) => {
+                          console.warn("Location permission denied", err);
+                          setPermissionModal(null);
+                          if (pendingCondition) {
+                            const cond = pendingCondition;
+                            setPendingCondition(null);
+                            proceedWithIntake(cond);
+                          }
+                        }
+                      );
+                    } else {
+                      setPermissionModal(null);
+                      if (pendingCondition) {
+                        const cond = pendingCondition;
+                        setPendingCondition(null);
+                        proceedWithIntake(cond);
+                      }
+                    }
+                  }}
+                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                >
+                  Authorize Compliance Check <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setPermissionModal(null);
+                    setPendingCondition(null);
+                  }}
+                  className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                >
+                  Cancel Consultation
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center space-y-3">
+                <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
+                  <Bell className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  SECURE MEDICAL ALERT SYSTEM
+                </h3>
+                <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
+                  Encrypted Push Channel
+                </span>
+                <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
+                  To maintain standard asynchronous clinic hours without delay, PrivyDoc utilizes secure instant alerts to notify you the moment your certified doctor:
+                </p>
+                <div className="text-left bg-black/40 border border-zinc-900 rounded-xl p-3 space-y-1.5 text-[10.5px] text-zinc-400">
+                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Claims your diagnostic folder file</p>
+                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Asks vital follow-up screening questions</p>
+                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Issues signed pharmacotherapy prescriptions</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => {
+                    if ("Notification" in window) {
+                      Notification.requestPermission().then((permission) => {
+                        console.log("Notification permission:", permission);
+                        setPermissionModal(null);
+                      });
+                    } else {
+                      setPermissionModal(null);
+                    }
+                  }}
+                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                >
+                  Enable Real-Time Alerts <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPermissionModal(null)}
+                  className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                >
+                  Dismiss for Now
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     )}

@@ -1,4 +1,4 @@
-import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest } from "../types";
+import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest, PricingConfig } from "../types";
 import { DEMO_DOCTORS, DEMO_CONSULTATIONS } from "../data";
 import { generateId } from "../utils";
 
@@ -62,8 +62,19 @@ const KEYS = {
   PAYOUT_REQUESTS: "privydoc_payout_requests",
   CURRENT_PATIENT: "privydoc_current_patient",
   CURRENT_DOCTOR: "privydoc_current_doctor",
-  CURRENT_ADMIN: "privydoc_current_admin"
+  CURRENT_ADMIN: "privydoc_current_admin",
+  PRICING: "privydoc_pricing"
 };
+
+export const DEFAULT_PRICING: PricingConfig[] = [
+  { id: "base_consultation", name: "Base Consultation", price: 7500, description: "Standard clinical evaluation of patient intake folders." },
+  { id: "review_consultation", name: "Review Consultation", price: 3500, description: "Clinical follow-up review for existing prescriptions." },
+  { id: "health_summary", name: "Health Summary", price: 4500, description: "Detailed clinical health audit summary compiled by a physician." },
+  { id: "follow_up", name: "Follow-up", price: 2000, description: "Brief subsequent medical check-in or clarification." },
+  { id: "home_care", name: "Home Care", price: 12000, description: "Virtual assisted home care and monitoring protocol guidance." },
+  { id: "specialist_review", name: "Specialist Review", price: 15000, description: "Referral and detailed dossier review by an MDCN consultant." },
+  { id: "ai_summary", name: "AI Summary", price: 1500, description: "Advanced semantic mapping and clinical brief compilation fee." },
+];
 
 // Data Mapper Utilities (Bridges database schema and client TypeScript models)
 const mapPatientToSupabase = (p: Patient) => ({
@@ -208,6 +219,16 @@ export async function syncWithSupabase() {
     if (Array.isArray(dbPayouts)) {
       localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(dbPayouts.map(mapPayoutFromSupabase)));
     }
+
+    // 5. Sync Pricing Configurations
+    try {
+      const dbPricing = await supabaseFetch("pricing");
+      if (Array.isArray(dbPricing) && dbPricing.length > 0) {
+        localStorage.setItem(KEYS.PRICING, JSON.stringify(dbPricing));
+      }
+    } catch (pricingErr) {
+      // Swallowed safely - Supabase might not have this optional table yet
+    }
   } catch (e) {
     console.warn("Supabase live sync is loading or unavailable. Using LocalStorage fallback.", e);
   }
@@ -223,6 +244,9 @@ export function initializeStorage() {
   }
   if (!localStorage.getItem(KEYS.PAYOUT_REQUESTS)) {
     localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify([]));
+  }
+  if (!localStorage.getItem(KEYS.PRICING)) {
+    localStorage.setItem(KEYS.PRICING, JSON.stringify(DEFAULT_PRICING));
   }
 }
 
@@ -638,6 +662,54 @@ export const adminApi = {
         console.error("Live clinician verification replicate failed:", e);
       });
 
+      return { success: true };
+    }
+    return { success: false };
+  }
+};
+
+// Dynamic Pricing Configuration API
+export const pricingApi = {
+  getAll: (): PricingConfig[] => {
+    const stored = localStorage.getItem(KEYS.PRICING);
+    if (!stored) {
+      localStorage.setItem(KEYS.PRICING, JSON.stringify(DEFAULT_PRICING));
+      return DEFAULT_PRICING;
+    }
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return DEFAULT_PRICING;
+    }
+  },
+
+  getById: (id: string): PricingConfig | undefined => {
+    return pricingApi.getAll().find(p => p.id === id);
+  },
+
+  updateAll: (pricing: PricingConfig[]): { success: boolean } => {
+    localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
+    
+    // Attempt live replication to Supabase if any pricing table exists
+    pricing.forEach(p => {
+      supabaseUpdate("pricing", `id=eq.${p.id}`, { price: p.price, name: p.name, description: p.description }).catch(e => {
+        // Safe to swallow, if table doesn't exist
+      });
+    });
+
+    return { success: true };
+  },
+
+  updatePrice: (id: string, price: number): { success: boolean } => {
+    const pricing = pricingApi.getAll();
+    const idx = pricing.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      pricing[idx].price = price;
+      localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
+      
+      supabaseUpdate("pricing", `id=eq.${id}`, { price }).catch(e => {
+        // Safe to swallow, if table doesn't exist
+      });
       return { success: true };
     }
     return { success: false };

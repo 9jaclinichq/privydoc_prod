@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { INTAKE_QUESTIONS } from "../data";
 import { formatNaira } from "../utils";
+import { pricingApi } from "../lib/api";
 
 interface IntakeFormProps {
   selectedCondition: any;
@@ -43,6 +44,7 @@ export default function IntakeForm({
   onCompletePayment,
   onCancel
 }: IntakeFormProps) {
+  const baseConsultationPrice = pricingApi.getById("base_consultation")?.price ?? 7500;
   // Submit Intake answers to navigate to payments page
   const handleIntakeFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,7 +270,7 @@ export default function IntakeForm({
             </div>
             <div className="text-right">
               <p className="text-[10px] uppercase font-mono text-zinc-500 tracking-wider">Doctor Fee</p>
-              <h4 className="text-base font-extrabold text-[#E5C158]">{formatNaira(selectedCondition.basePrice)}</h4>
+              <h4 className="text-base font-extrabold text-[#E5C158]">{formatNaira(baseConsultationPrice)}</h4>
             </div>
           </div>
 
@@ -329,7 +331,7 @@ export default function IntakeForm({
             /* Bank Transfer info */
             <div className="bg-black p-5 rounded-2xl border border-zinc-900 space-y-4 animate-fade-in">
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Send exactly <span className="font-bold text-white">{formatNaira(selectedCondition.basePrice)}</span> via mobile app to the virtual bypass gateway bank account:
+                Send exactly <span className="font-bold text-white">{formatNaira(baseConsultationPrice)}</span> via mobile app to the virtual bypass gateway bank account:
               </p>
               <div className="p-4 bg-zinc-950 rounded-xl space-y-2.5 text-xs font-mono border border-zinc-900">
                 <p className="text-zinc-500 flex justify-between"><span>Gateway Bank:</span> <strong className="text-white">Wema Bank</strong></p>
@@ -354,7 +356,7 @@ export default function IntakeForm({
               ) : (
                 <>
                   <Lock className="w-3.5 h-3.5 text-black" />
-                  Securely Transact {formatNaira(selectedCondition.basePrice)}
+                  Securely Transact {formatNaira(baseConsultationPrice)}
                 </>
               )}
             </button>

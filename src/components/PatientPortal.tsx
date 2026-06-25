@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { 
-  Lock, ArrowRight, User, ShieldAlert, FileText, FileDown, 
+  Lock, ArrowRight, ArrowLeft, User, ShieldAlert, FileText, FileDown, 
   MessageSquare, Sparkles, Send, HelpCircle, Activity,
   LineChart, Compass, Wallet, Settings, Clock, Heart, ClipboardCheck
 } from "lucide-react";
@@ -198,6 +198,17 @@ export default function PatientPortal({
       {!selectedCase ? (
         <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-6 text-center animate-slide-up relative">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-[#d4af37]" />
+          
+          <div className="flex justify-start">
+            <button 
+              type="button"
+              onClick={onStartNewCase}
+              className="flex items-center gap-1.5 text-zinc-500 hover:text-white transition-colors text-[10px] font-bold font-mono uppercase tracking-wider"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Programs
+            </button>
+          </div>
+
           <div className="w-12 h-12 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto">
             <Lock className="w-5 h-5" />
           </div>

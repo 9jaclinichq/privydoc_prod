@@ -2,6 +2,7 @@ import React from "react";
 import { Activity, Sparkles, HelpCircle, ArrowLeft, HeartPulse } from "lucide-react";
 import { INTAKE_QUESTIONS, SYMPTOM_ADVICE } from "../data";
 import { formatNaira } from "../utils";
+import { pricingApi } from "../lib/api";
 
 interface SymptomCheckerProps {
   selectedCondition: any;
@@ -22,6 +23,7 @@ export default function SymptomChecker({
   showAdvice,
   setShowAdvice
 }: SymptomCheckerProps) {
+  const baseConsultationPrice = pricingApi.getById("base_consultation")?.price ?? 7500;
   // Filter questions for the active condition category (excluding safety/general demographic questions)
   const categoryQuestions = INTAKE_QUESTIONS.filter(q => q.category === selectedCondition.id);
 
@@ -124,7 +126,7 @@ export default function SymptomChecker({
               className="px-5 py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl shadow-lg transition-all space-y-0.5"
             >
               <span className="block">Initiate Medical Intake</span>
-              <span className="block text-[9.5px] opacity-75 font-mono font-medium">Clinic Fee: {formatNaira(selectedCondition.basePrice)}</span>
+              <span className="block text-[9.5px] opacity-75 font-mono font-medium">Clinic Fee: {formatNaira(baseConsultationPrice)}</span>
             </button>
           </div>
 

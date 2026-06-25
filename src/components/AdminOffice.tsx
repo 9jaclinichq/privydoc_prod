@@ -2,17 +2,17 @@ import React, { useState } from "react";
 import { 
   Building, ShieldAlert, Key, Users, Sparkles, Wallet, 
   ArrowRight, Activity, LogOut, CheckCircle, Clock, Trash,
-  Database, Cpu, Layers, Terminal, Zap, Server, Check
+  Database, Cpu, Layers, Terminal, Zap, Server, Check, Coins, Settings2
 } from "lucide-react";
-import { doctorApi, adminApi } from "../lib/api";
+import { doctorApi, adminApi, pricingApi } from "../lib/api";
 
 interface AdminOfficeProps {
   adminPin: string;
   setAdminPin: (pin: string) => void;
   isAdminAuthenticated: boolean;
   setIsAdminAuthenticated: (auth: boolean) => void;
-  adminView: "verifications" | "payouts" | "supabase";
-  setAdminView: (v: "verifications" | "payouts" | "supabase") => void;
+  adminView: "verifications" | "payouts" | "supabase" | "pricing";
+  setAdminView: (v: "verifications" | "payouts" | "supabase" | "pricing") => void;
   onAdminLogin: (e: React.FormEvent) => void;
   onAdminVerifyDoctor: (id: string, approve: boolean) => void;
   onAdminApprovePayout: (id: string, approve: boolean) => void;
@@ -39,6 +39,28 @@ export default function AdminOffice({
   // Re-fetch ledger items inside context
   const registeredDoctors = doctorApi.getAll();
   const allPayoutRequests = adminApi.getAllPayouts();
+
+  // Pricing states
+  const [editingRateId, setEditingRateId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState<number>(0);
+  const [editingName, setEditingName] = useState("");
+  const [editingDesc, setEditingDesc] = useState("");
+
+  const allRates = pricingApi.getAll();
+
+  const handleStartEdit = (rate: any) => {
+    setEditingRateId(rate.id);
+    setEditingPrice(rate.price);
+    setEditingName(rate.name);
+    setEditingDesc(rate.description);
+  };
+
+  const handleSaveRate = (id: string) => {
+    const updatedRates = allRates.map(r => r.id === id ? { ...r, price: editingPrice, name: editingName, description: editingDesc } : r);
+    pricingApi.updateAll(updatedRates);
+    setEditingRateId(null);
+    triggerRefresh();
+  };
 
   // Substate for Supabase dashboard section
   const [dbSubView, setDbSubView] = useState<"schemas" | "edge" | "cron">("schemas");
@@ -156,6 +178,14 @@ export default function AdminOffice({
                 }`}
               >
                 <Database className="w-3.5 h-3.5 text-[#E5C158]" /> Supabase Engine
+              </button>
+              <button 
+                onClick={() => setAdminView("pricing")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  adminView === "pricing" ? "bg-rose-600 text-white" : "border border-zinc-900 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Coins className="w-3.5 h-3.5 text-[#E5C158]" /> Pricing Rates
               </button>
               <button 
                 onClick={() => setIsAdminAuthenticated(false)}
@@ -358,7 +388,7 @@ export default function AdminOffice({
                         <p className="text-zinc-400 flex justify-between"><span>answers <strong className="text-zinc-600">JSONB</strong></span> <span className="text-zinc-500">NOT NULL</span></p>
                         <p className="text-zinc-400 flex justify-between"><span>ai_summary <strong className="text-zinc-600">TEXT</strong></span> <span className="text-zinc-500">NULLABLE</span></p>
                         <p className="text-zinc-400 flex justify-between"><span>prescription <strong className="text-zinc-600">TEXT</strong></span> <span className="text-zinc-500">NULLABLE</span></p>
-                        <p className="text-zinc-400 flex justify-between"><span>amount_paid <strong className="text-zinc-600">NUMERIC</strong></span> <span className="text-zinc-500 font-bold">₦7,500 / ₦3,500</span></p>
+                        <p className="text-zinc-400 flex justify-between"><span>amount_paid <strong className="text-zinc-600">NUMERIC</strong></span> <span className="text-zinc-500 font-bold">Dynamic Platform Rates</span></p>
                       </div>
                       <div className="p-2.5 bg-zinc-950 rounded border border-zinc-900 text-[9.5px] font-mono text-zinc-500 leading-normal">
                         <strong>RLS POLICY:</strong> "Patients can insert. Read access permitted only to owning patient and approved clinicians inside registry."
@@ -513,6 +543,104 @@ export default function AdminOffice({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* VIEW IV: PRICING RATES PANEL */}
+          {adminView === "pricing" && (
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-6 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 border-b border-zinc-900 pb-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    <Coins className="w-4 h-4 text-[#E5C158]" /> Centralized Platform Rates Console
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Manage service prices across the entire platform in real time. Changes propagate immediately to checkout, portals, invoices, and reports.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5">
+                {allRates.map((rate) => (
+                  <div key={rate.id} className="p-5 bg-black rounded-xl border border-zinc-900 space-y-4 hover:border-zinc-800 transition-all">
+                    {editingRateId === rate.id ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Category Title</label>
+                            <input 
+                              type="text" 
+                              value={editingName} 
+                              onChange={(e) => setEditingName(e.target.value)} 
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Standard Price (₦)</label>
+                            <input 
+                              type="number" 
+                              value={editingPrice} 
+                              onChange={(e) => setEditingPrice(Math.max(0, parseInt(e.target.value) || 0))} 
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Category Description</label>
+                          <textarea 
+                            value={editingDesc} 
+                            onChange={(e) => setEditingDesc(e.target.value)} 
+                            rows={2}
+                            className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#d4af37] resize-none"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/40">
+                          <button 
+                            type="button" 
+                            onClick={() => setEditingRateId(null)}
+                            className="px-3.5 py-1.5 border border-zinc-900 hover:border-zinc-800 text-zinc-400 hover:text-white rounded-lg text-xs font-bold transition-all"
+                          >
+                            Cancel
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => handleSaveRate(rate.id)}
+                            className="px-4 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-lg text-xs transition-all flex items-center gap-1.5"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h5 className="font-bold text-white text-xs">{rate.name}</h5>
+                            <span className="text-[8px] font-mono bg-zinc-900 text-zinc-500 px-1.5 py-0.5 rounded uppercase border border-zinc-800">
+                              {rate.id}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">{rate.description}</p>
+                        </div>
+
+                        <div className="flex sm:flex-col items-start sm:items-end gap-3 sm:gap-2 shrink-0">
+                          <div className="text-left sm:text-right">
+                            <span className="text-[9px] font-mono text-zinc-500 uppercase block tracking-wider">PLATFORM RATE</span>
+                            <strong className="text-sm font-extrabold text-[#E5C158] font-mono">{formatNaira(rate.price)}</strong>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(rate)}
+                            className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 rounded-lg text-[10.5px] font-mono font-bold uppercase transition-all flex items-center gap-1"
+                          >
+                            <Settings2 className="w-3.5 h-3.5 text-[#E5C158]" /> Adjust
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

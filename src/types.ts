@@ -62,3 +62,11 @@ export interface PayoutRequest {
   status: "pending" | "approved" | "rejected";
   created_at: string;
 }
+
+export interface PricingConfig {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+}
+

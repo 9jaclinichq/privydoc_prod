@@ -1,0 +1,85 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  width="100%"
+  height="100%"
+  fill="none"
+>
+  <!-- Background Disc -->
+  <circle cx="256" cy="256" r="240" fill="#09090b" stroke="#1d1d21" stroke-width="6" />
+
+  <defs>
+    <!-- Metallic Gold Gradient -->
+    <linearGradient id="pwa-gold-metallic" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF2D4" />
+      <stop offset="30%" stop-color="#E5C158" />
+      <stop offset="50%" stop-color="#D4AF37" />
+      <stop offset="85%" stop-color="#A27913" />
+      <stop offset="100%" stop-color="#5C4204" />
+    </linearGradient>
+
+    <!-- Inner Highlight -->
+    <linearGradient id="pwa-gold-highlight" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF" stop-opacity="0.2" />
+      <stop offset="40%" stop-color="#E5C158" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#000" stop-opacity="0.35" />
+    </linearGradient>
+
+    <!-- Soft outer glow for branding -->
+    <filter id="pwa-glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#D4AF37" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Centered Shield Container -->
+  <g filter="url(#pwa-glow)" transform="translate(106, 86)">
+    <!-- Shield Outer Path (scaled up) -->
+    <path
+      d="M150 20 
+         C205 28, 262.5 38, 262.5 73 
+         C262.5 168, 225 238, 150 273 
+         C75 238, 37.5 168, 37.5 73 
+         C37.5 38, 95 28, 150 20 Z"
+      fill="url(#pwa-gold-metallic)"
+      stroke="#09090b"
+      stroke-width="3"
+    />
+
+    <!-- Vertical Divider -->
+    <path
+      d="M145 20 L145 272 H155 L155 20 Z"
+      fill="#09090b"
+    />
+    <!-- Horizontal Divider -->
+    <path
+      d="M37.5 130 H262.5 V140 H37.5 Z"
+      fill="#09090b"
+    />
+
+    <!-- Inner Bevel/Accent -->
+    <path
+      d="M150 40 
+         C190 47.5, 237.5 55, 237.5 81.5 
+         C237.5 154, 207.5 208.5, 150 236.5 
+         C92.5 208.5, 62.5 154, 62.5 81.5 
+         C62.5 55, 110 47.5, 150 40 Z"
+      fill="url(#pwa-gold-highlight)"
+      stroke="#09090b"
+      stroke-width="2.5"
+    />
+
+    <!-- Center Raised Medical Clinical Cross -->
+    <g transform="translate(150, 100)">
+      <!-- Horizontal Bar -->
+      <path
+        d="M-37.5 -8.5 H37.5 V8.5 H-37.5 Z"
+        fill="#09090b"
+      />
+      <!-- Vertical Bar -->
+      <path
+        d="M-8.5 -37.5 H8.5 V37.5 H-8.5 Z"
+        fill="#09090b"
+      />
+    </g>
+  </g>
+</svg>

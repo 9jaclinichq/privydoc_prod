@@ -14,6 +14,7 @@ interface PatientLandingProps {
   onSearchPortal: () => void;
   patientSession?: any;
   onLogout?: () => void;
+  onSelectClinician?: () => void;
 }
 
 export default function PatientLanding({
@@ -24,7 +25,8 @@ export default function PatientLanding({
   setSearchPhone,
   onSearchPortal,
   patientSession = null,
-  onLogout = () => {}
+  onLogout = () => {},
+  onSelectClinician = () => {}
 }: PatientLandingProps) {
   const baseConsultationPrice = pricingApi.getById("base_consultation")?.price ?? 7500;
   return (
@@ -194,6 +196,20 @@ export default function PatientLanding({
             <p className="text-xs text-zinc-400 leading-relaxed font-sans">Retrieve official digital prescriptions, medication schedules, and clinical reports directly from your personal encrypted secure locker.</p>
           </div>
         </div>
+      </div>
+
+      {/* Clinician Onboarding CTA Section */}
+      <div className="rounded-2xl border border-zinc-900 bg-zinc-950/20 p-6 text-center space-y-4">
+        <h5 className="font-bold text-zinc-300 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Are you a licensed clinician?</h5>
+        <p className="text-xs text-zinc-500 max-w-md mx-auto">
+          Help expand men's healthcare access across Nigeria. Log in to your clinical workstation or submit your practice application with your MDCN credentials.
+        </p>
+        <button
+          onClick={onSelectClinician}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-[#d4af37] border border-zinc-800 hover:border-zinc-700 font-bold text-xs transition-colors"
+        >
+          Access Clinician Workstation <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

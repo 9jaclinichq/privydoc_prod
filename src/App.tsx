@@ -332,6 +332,26 @@ export default function App() {
 
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
+  const switchRoleSafely = (targetRole: "patient" | "clinician" | "admin", successAction: () => void) => {
+    if (targetRole === activeTab) {
+      successAction();
+      return;
+    }
+    if (patientSession && activeTab === "patient") {
+      alert("Active Patient Session: Please sign out of your Patient secure vault first to switch roles.");
+      return;
+    }
+    if (currentDoctor && activeTab === "clinician") {
+      alert("Active Clinician Session: Please sign out of your workstation first to switch roles.");
+      return;
+    }
+    if (isAdminAuthenticated && activeTab === "admin") {
+      alert("Active Admin Session: Please sign out of the Admin Office first to switch roles.");
+      return;
+    }
+    successAction();
+  };
+
   // Symptom checker selector
   const handleSymptomSelect = (conditionId: string) => {
     const condition = MEN_HEALTH_CONDITIONS.find(c => c.id === conditionId);
@@ -509,15 +529,19 @@ export default function App() {
     if (!searchPhone) return;
     const key = searchPhone.toLowerCase().trim();
     if (key === "doctor" || key === "clinician") {
-      setShowHiddenRoles(true);
-      setActiveTab("clinician");
-      setSearchPhone("");
+      switchRoleSafely("clinician", () => {
+        setShowHiddenRoles(true);
+        setActiveTab("clinician");
+        setSearchPhone("");
+      });
       return;
     }
     if (key === "admin" || key === "root") {
-      setShowHiddenRoles(true);
-      setActiveTab("admin");
-      setSearchPhone("");
+      switchRoleSafely("admin", () => {
+        setShowHiddenRoles(true);
+        setActiveTab("admin");
+        setSearchPhone("");
+      });
       return;
     }
 
@@ -989,9 +1013,11 @@ export default function App() {
           {/* Custom Gold Brand Logo */}
           <button 
             onClick={() => { 
-              setActiveTab("patient"); 
-              setPatientSubView("landing"); 
-              setSelectedCase(null); 
+              switchRoleSafely("patient", () => {
+                setActiveTab("patient"); 
+                setPatientSubView("landing"); 
+                setSelectedCase(null); 
+              });
               setLogoClicks(prev => {
                 const next = prev + 1;
                 if (next >= 5) {
@@ -1010,7 +1036,13 @@ export default function App() {
           {/* Luxury Navigation Role Switcher */}
           <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-900">
             <button
-              onClick={() => { setActiveTab("patient"); setPatientSubView("landing"); setSelectedCase(null); }}
+              onClick={() => {
+                switchRoleSafely("patient", () => {
+                  setActiveTab("patient"); 
+                  setPatientSubView("landing"); 
+                  setSelectedCase(null);
+                });
+              }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === "patient" 
                   ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
@@ -1022,7 +1054,13 @@ export default function App() {
             {(showHiddenRoles || activeTab === "clinician" || activeTab === "admin") && (
               <>
                 <button
-                  onClick={() => { setActiveTab("clinician"); setDocError(""); setDocSuccess(""); }}
+                  onClick={() => {
+                    switchRoleSafely("clinician", () => {
+                      setActiveTab("clinician"); 
+                      setDocError(""); 
+                      setDocSuccess("");
+                    });
+                  }}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     activeTab === "clinician" 
                       ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
@@ -1032,7 +1070,11 @@ export default function App() {
                   Clinician Area
                 </button>
                 <button
-                  onClick={() => { setActiveTab("admin"); }}
+                  onClick={() => {
+                    switchRoleSafely("admin", () => {
+                      setActiveTab("admin");
+                    });
+                  }}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
                     activeTab === "admin" 
                       ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
@@ -1064,6 +1106,13 @@ export default function App() {
                 onSearchPortal={handleSearchPatientPortal}
                 patientSession={patientSession}
                 onLogout={handlePatientLogout}
+                onSelectClinician={() => {
+                  switchRoleSafely("clinician", () => {
+                    setActiveTab("clinician");
+                    setDocView("login");
+                    setShowHiddenRoles(true);
+                  });
+                }}
               />
             )}
 

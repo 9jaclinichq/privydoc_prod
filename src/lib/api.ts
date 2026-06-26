@@ -1468,6 +1468,21 @@ export const pricingApi = {
       supabaseUpdate("pricing", `id=eq.${id}`, { price }).catch(e => {
         // Safe to swallow, if table doesn't exist
       });
+
+      // Write audit log entry for price_changed
+      supabaseInsert("audit_log", {
+        id: "aud_" + Math.random().toString(36).substr(2, 9),
+        action: "price_changed",
+        actor_type: "admin",
+        actor_id: "admin_clearance",
+        target_type: "pricing",
+        target_id: id,
+        detail: `Updated price config for ${id} to ₦${price}`,
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not write audit log entry:", e);
+      });
+
       return { success: true };
     }
     return { success: false };

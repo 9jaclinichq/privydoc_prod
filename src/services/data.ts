@@ -14,7 +14,7 @@ function getHeaders(): Record<string, string> {
       } catch (e) {}
     }
 
-    const doctorSession = localStorage.getItem("privydoc_current_doctor");
+    const doctorSession = localStorage.getItem("privydoc_doctor_session") || localStorage.getItem("privydoc_current_doctor");
     if (doctorSession) {
       try {
         const doctor = JSON.parse(doctorSession);

@@ -94,7 +94,7 @@ function rateLimiter(endpoint: string, limit: number, windowMs: number, message:
   };
 }
 
-// Object-Level Authorization and Role Enforcer (IDOR mitigation)
+// Object-Level Authorization and Role Enforcer (IDOR mitigation with strict row-scoping)
 function enforceAuthorization(req: express.Request, res: express.Response, next: express.NextFunction) {
   const { table } = req.params;
   const method = req.method;
@@ -108,15 +108,19 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
     return next();
   }
 
+  const query = decodeURIComponent(req.url.split("?")[1] || "");
+
   // Patients Table Routing
   if (table === "patients") {
     if (method === "POST") {
       return next(); // Permit registration
     }
     if (method === "GET" || method === "PATCH") {
-      const query = req.url.split("?")[1] || "";
       // Allow checking phone presence for login, or accessing own record
       if (query.includes("phone=eq.") || (patientPhone && query.includes(patientPhone))) {
+        if (patientPhone && !query.includes(`phone=eq.${patientPhone}`) && !query.includes(patientPhone)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Attempt Blocked: Scoped patient phone mismatch." });
+        }
         return next();
       }
     }
@@ -132,7 +136,6 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
       return next(); // Allow lookup of clinicians (e.g. to display name)
     }
     if (method === "PATCH") {
-      const query = req.url.split("?")[1] || "";
       if (doctorId && query.includes(doctorId)) {
         return next(); // Let clinicians update their own records (bank details, active status)
       }
@@ -143,15 +146,86 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
   // Consultations Table Routing
   if (table === "consultations") {
     if (method === "POST") {
-      if (patientPhone) return next(); // Patients can submit intakes
+      if (patientPhone) {
+        // Enforce patient can only create for their own phone number
+        if (req.body && req.body.patient_phone && req.body.patient_phone !== patientPhone) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "Grievance: Intake submission phone mismatch." });
+        }
+        return next();
+      }
     }
     if (method === "GET") {
-      if (patientPhone || doctorId) return next(); // Patients see own, doctors see pool
+      if (patientPhone && !doctorId) {
+        // Patients MUST be scoped to their own records
+        if (!query.includes(`patient_phone=eq.${patientPhone}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Request must be strictly scoped to your active phone vault." });
+        }
+      }
+      if (patientPhone || doctorId) return next();
     }
     if (method === "PATCH") {
-      if (patientPhone || doctorId) return next(); // Let assigned doctor update, or patient update
+      if (patientPhone && !doctorId) {
+        if (!query.includes(`patient_phone=eq.${patientPhone}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Patch must specify your active phone scope." });
+        }
+      }
+      if (patientPhone || doctorId) return next();
     }
     return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "Unauthorized access to consultations." });
+  }
+
+  // Threads Table Routing
+  if (table === "threads") {
+    if (patientPhone && !doctorId) {
+      if (method === "GET" && !query.includes(`patient_phone=eq.${patientPhone}`)) {
+        return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Threads query must be scoped to your active phone." });
+      }
+    }
+  }
+
+  // Notifications Table Routing
+  if (table === "notifications") {
+    if (method === "GET") {
+      if (patientPhone && !doctorId) {
+        if (!query.includes(`recipient_id=eq.${patientPhone}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Scoped notifications mismatch." });
+        }
+      } else if (doctorId) {
+        if (!query.includes(`recipient_id=eq.${doctorId}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Scoped notifications mismatch." });
+        }
+      }
+    }
+  }
+
+  // Disputes Table Routing
+  if (table === "disputes") {
+    if (patientPhone && !doctorId) {
+      if (method === "POST") {
+        if (req.body && req.body.patient_phone !== patientPhone) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "Cannot submit dispute for another patient." });
+        }
+      } else if (method === "GET") {
+        if (!query.includes(`patient_phone=eq.${patientPhone}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Disputes scope mismatch." });
+        }
+      }
+    }
+  }
+
+  // Payout Requests Routing
+  if (table === "payout_requests") {
+    if (doctorId) {
+      if (method === "POST") {
+        if (req.body && req.body.doctor_id !== doctorId) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "Cannot submit payout request for another clinician." });
+        }
+      } else if (method === "GET") {
+        if (!query.includes(`doctor_id=eq.${doctorId}`)) {
+          return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: Payouts scope mismatch." });
+        }
+      }
+    }
   }
 
   // Configuration Tables
@@ -265,7 +339,14 @@ app.get("/api/data/:table", enforceAuthorization, async (req, res, next) => {
 });
 
 // 4. Generic Data Proxy - POST
-app.post("/api/data/:table", enforceAuthorization, async (req, res, next) => {
+app.post("/api/data/:table", enforceAuthorization, (req, res, next) => {
+  const { table } = req.params;
+  if (table === "patients" || table === "doctors") {
+    // Limit registrations: max 5 requests per 5 minutes per IP
+    return rateLimiter("registration", 5, 5 * 60 * 1000, "Too many registration attempts. Please wait 5 minutes.")(req, res, next);
+  }
+  next();
+}, async (req, res, next) => {
   try {
     const { table } = req.params;
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
@@ -392,14 +473,13 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
   }
 
   const todayDate = new Date().toISOString().split("T")[0];
-  const otpDailyId = `otp_daily:${todayDate}`;
 
   try {
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
     // A. Daily limit throttling check (max 100 OTPs per day across system to prevent API cost attacks)
-    const dailyResponse = await fetch(`${supabaseUrl}/rest/v1/otp_daily?id=eq.${otpDailyId}`, {
+    const dailyResponse = await fetch(`${supabaseUrl}/rest/v1/otp_daily?day=eq.${todayDate}`, {
       method: "GET",
       headers: {
         apikey: supabaseServiceKey,
@@ -482,6 +562,22 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
       throw new Error(`Failed to save OTP in database: ${errText}`);
     }
 
+    // Log request attempt in otp_requests table
+    const reqId = "otp_req_" + Math.random().toString(36).substr(2, 9);
+    await fetch(`${supabaseUrl}/rest/v1/otp_requests`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        id: reqId,
+        phone: sanitizedPhone,
+        created_at: new Date().toISOString()
+      })
+    }).catch(e => console.error("Could not write otp_requests entry:", e));
+
     // E. Record/increment daily daily cap
     if (dailyCount === 0) {
       await fetch(`${supabaseUrl}/rest/v1/otp_daily`, {
@@ -492,13 +588,12 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          id: otpDailyId,
-          date: todayDate,
+          day: todayDate,
           count: 1
         })
       });
     } else {
-      await fetch(`${supabaseUrl}/rest/v1/otp_daily?id=eq.${otpDailyId}`, {
+      await fetch(`${supabaseUrl}/rest/v1/otp_daily?day=eq.${todayDate}`, {
         method: "PATCH",
         headers: {
           apikey: supabaseServiceKey,
@@ -531,10 +626,23 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
             messaging_product: "whatsapp",
             recipient_type: "individual",
             to: sanitizedPhone,
-            type: "text",
-            text: {
-              preview_url: false,
-              body: `Your PrivyDoc verification code is ${code}. It expires in 10 minutes. For your vault security, do NOT share this code.`
+            type: "template",
+            template: {
+              name: "privydoc-otp",
+              language: {
+                code: "en"
+              },
+              components: [
+                {
+                  "type": "body",
+                  "parameters": [
+                    {
+                      "type": "text",
+                      "text": code
+                    }
+                  ]
+                }
+              ]
             }
           })
         });
@@ -590,7 +698,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
 });
 
 // 2. WhatsApp OTP Verify endpoint
-app.post("/api/otp/verify", async (req, res) => {
+app.post("/api/otp/verify", rateLimiter("otpVerify", 10, 1 * 60 * 1000, "Too many OTP verification attempts. Please wait."), async (req, res) => {
   const { phone, code } = req.body;
   if (!phone || !code) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number and code are required." });
@@ -656,7 +764,7 @@ app.post("/api/otp/verify", async (req, res) => {
 });
 
 // 3. Secure Patient Login Endpoint with Lockout Guard
-app.post("/api/auth/patient/login", async (req, res) => {
+app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { phone, pin } = req.body;
   if (!phone || !pin) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number and PIN are required." });
@@ -747,7 +855,7 @@ app.post("/api/auth/patient/login", async (req, res) => {
 });
 
 // 4. Secure Clinician Login Endpoint with Lockout Guard
-app.post("/api/auth/clinician/login", async (req, res) => {
+app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { mdcn_folio, pin } = req.body;
   if (!mdcn_folio || !pin) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "MDCN Folio and PIN are required." });
@@ -845,7 +953,7 @@ app.post("/api/auth/clinician/login", async (req, res) => {
 });
 
 // 5. Secure Admin Login Endpoint with Lockout Guard
-app.post("/api/auth/admin/login", async (req, res) => {
+app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { pin } = req.body;
   if (!pin) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Clearance PIN is required." });

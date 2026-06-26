@@ -429,8 +429,8 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                 <input required type="text" placeholder="e.g. Dr. Adeola Martins" value={docRegName} onChange={(e) => setDocRegName(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-400">Mobile Phone Number</label>
-                <input required type="tel" placeholder="e.g. +234 805..." value={docRegPhone} onChange={(e) => setDocRegPhone(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                <label className="text-xs font-bold text-zinc-400">WhatsApp Number</label>
+                <input required type="tel" placeholder="e.g. 234805..." value={docRegPhone} onChange={(e) => setDocRegPhone(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">

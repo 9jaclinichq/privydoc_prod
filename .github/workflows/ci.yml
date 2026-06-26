@@ -87,6 +87,12 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
           
+          # Explicitly force routing 100% traffic to the latest staging revision to bypass any stale traffic splits
+          gcloud run services update-traffic privydoc-app-staging \
+            --to-latest \
+            --platform managed \
+            --region ${{ secrets.GCP_REGION }}
+          
           # 2. Deploy Production Service (staged with no traffic, ready for promotion)
           echo "Deploying to Production Service (No Traffic): privydoc-app"
           if gcloud run services describe privydoc-app --platform managed --region ${{ secrets.GCP_REGION }} >/dev/null 2>&1; then

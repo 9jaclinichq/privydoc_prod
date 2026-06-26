@@ -22,5 +22,5 @@ RUN npm run build
 # Expose port 3000 (metadata for documentation, Cloud Run routes dynamically)
 EXPOSE 3000
 
-# Start the full-stack server using tsx
-CMD ["npx", "tsx", "server.ts"]
+# Start the full-stack server using node on the compiled production bundle
+CMD ["node", "dist/server.js"]

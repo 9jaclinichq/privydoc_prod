@@ -670,6 +670,7 @@ export default function App() {
     const res = patientApi.register(regName, regPhone, parseInt(regAge), regState, regEmail, regPin);
     if (res.success && res.patient) {
       localStorage.setItem("privydoc_patient_session", JSON.stringify(res.patient));
+      localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
       setPatientSession(res.patient);
       
       // Clear registration state
@@ -714,6 +715,7 @@ export default function App() {
     const res = await patientApi.login(loginPhone, loginPin);
     if (res.success && res.patient) {
       localStorage.setItem("privydoc_patient_session", JSON.stringify(res.patient));
+      localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
       setPatientSession(res.patient);
       setLoginPin("");
 
@@ -836,7 +838,7 @@ export default function App() {
         body: JSON.stringify({ phone: patientSession?.phone, pin: unlockPin })
       });
       const data = await response.json();
-      if (response.ok && data.success) {
+      if (response.ok && (data.success || data.ok)) {
         setIsPatientSessionLocked(false);
         setUnlockPin("");
         localStorage.setItem("privydoc_patient_last_active", Date.now().toString());

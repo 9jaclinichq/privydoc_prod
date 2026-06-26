@@ -1712,7 +1712,7 @@ app.post("/api/scheduler/apl-check", handleAplCheck);
 const isProd = process.env.NODE_ENV === "production";
 
 if (isProd) {
-  const distPath = path.resolve(__dirname, "dist");
+  const distPath = path.resolve(process.cwd(), "dist");
   app.use(express.static(distPath));
   
   app.get("*", (req, res) => {

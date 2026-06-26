@@ -4,8 +4,8 @@ FROM node:22-alpine
 # Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json first to leverage Docker layer caching
-COPY package*.json ./
+# Copy package.json first to leverage Docker layer caching (avoiding package-lock.json to bypass npm native binding bugs)
+COPY package.json ./
 
 # Install all dependencies (including devDependencies needed for building & tsx)
 RUN npm install

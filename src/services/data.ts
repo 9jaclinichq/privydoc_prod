@@ -24,7 +24,7 @@ function getHeaders(): Record<string, string> {
       } catch (e) {}
     }
 
-    const adminSession = localStorage.getItem("privydoc_current_admin");
+    const adminSession = localStorage.getItem("privydoc_admin_session") || localStorage.getItem("privydoc_current_admin");
     if (adminSession === "true" || adminSession) {
       headers["X-Admin-Auth"] = "true";
     }

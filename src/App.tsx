@@ -166,8 +166,10 @@ export default function App() {
   useEffect(() => {
     if (isAdminAuthenticated) {
       localStorage.setItem("privydoc_admin_session", "true");
+      localStorage.setItem("privydoc_current_admin", "true");
     } else {
       localStorage.removeItem("privydoc_admin_session");
+      localStorage.removeItem("privydoc_current_admin");
     }
   }, [isAdminAuthenticated]);
 

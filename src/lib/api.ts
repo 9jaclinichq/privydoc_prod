@@ -211,7 +211,7 @@ export async function syncWithSupabase() {
   try {
     const patientSession = localStorage.getItem("privydoc_patient_session");
     const doctorSession = localStorage.getItem("privydoc_doctor_session") || localStorage.getItem("privydoc_current_doctor");
-    const adminSession = localStorage.getItem("privydoc_current_admin");
+    const adminSession = localStorage.getItem("privydoc_admin_session") || localStorage.getItem("privydoc_current_admin");
 
     // 1. ADMIN SESSION: Sync everything
     if (adminSession === "true" || adminSession) {
@@ -393,7 +393,8 @@ export const doctorApi = {
     } catch (e) {
       console.error("Doctor API login fetch failed, falling back:", e);
       const doctors = doctorApi.getAll();
-      const doc = doctors.find(d => d.mdcn_folio === mdcn_folio && d.pin_hash === pin);
+      const hashedPin = sha256(pin);
+      const doc = doctors.find(d => d.mdcn_folio === mdcn_folio && (d.pin_hash === pin || d.pin_hash === hashedPin));
       if (!doc) {
         return { success: false, error: "Invalid MDCN Folio Number or PIN." };
       }
@@ -1613,7 +1614,8 @@ export const patientApi = {
     } catch (e) {
       console.error("Patient API login fetch failed, falling back:", e);
       const patients = patientApi.getAll();
-      const patient = patients.find(p => p.phone === phone && p.pin_hash === pin);
+      const hashedPin = sha256(pin);
+      const patient = patients.find(p => p.phone === phone && (p.pin_hash === pin || p.pin_hash === hashedPin));
       if (!patient) {
         return { success: false, error: "Invalid phone number or secure 6-digit PIN." };
       }

@@ -972,8 +972,9 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
     });
   }
 
-  // Admin secure default bypass PIN: 9900
-  if (pin !== "9900") {
+  // Admin secure default bypass PIN
+  const adminPinSecret = process.env.ADMIN_PIN || "9804";
+  if (pin !== adminPinSecret) {
     if (!pinAttempts[key] || now > pinAttempts[key].lockedUntil) {
       pinAttempts[key] = { count: 0, lockedUntil: 0 };
     }

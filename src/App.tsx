@@ -912,13 +912,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Admin login error:", error);
-      // Fallback
-      if (adminPin === "9900") {
-        setIsAdminAuthenticated(true);
-        setAdminView("verifications");
-      } else {
-        alert("Invalid Admin clearance PIN.");
-      }
+      alert("Admin authentication service is currently offline. Please try again later.");
     }
   };
 

@@ -22,7 +22,7 @@ interface IntakeFormProps {
   paymentMethod: "card" | "bank";
   setPaymentMethod: (method: "card" | "bank") => void;
   isSubmittingIntake: boolean;
-  onCompletePayment: () => void;
+  onCompletePayment: (bypass?: boolean) => void;
   onCancel: () => void;
 }
 
@@ -45,6 +45,9 @@ export default function IntakeForm({
   onCancel
 }: IntakeFormProps) {
   const baseConsultationPrice = pricingApi.getById("base_consultation")?.price ?? 7500;
+  const isTestMode = typeof window !== "undefined" && 
+    (window.location.hostname !== "app.privydoc.com.ng" || window.location.search.includes("test=true"));
+
   // Submit Intake answers to navigate to payments page
   const handleIntakeFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,6 +287,26 @@ export default function IntakeForm({
             </div>
           </div>
 
+          {isTestMode && (
+            <div className="p-5 bg-amber-500/5 border border-amber-500/10 rounded-2xl space-y-3.5 text-xs">
+              <div className="flex items-center gap-2 text-[#E5C158] font-bold">
+                <Sparkles className="w-4 h-4 shrink-0 text-[#E5C158]" />
+                <span className="font-mono tracking-wider text-[11px] uppercase">TEST MODE ENABLED (FREE TESTING)</span>
+              </div>
+              <p className="text-zinc-400 text-[11px] leading-relaxed">
+                Since you are on a development or staging environment, you can skip payment and submit your clinical dossier immediately. A real consultation record will be created in the database and show up in the doctor's panel.
+              </p>
+              <button
+                type="button"
+                onClick={() => onCompletePayment(true)}
+                disabled={isSubmittingIntake}
+                className="w-full py-2.5 bg-[#d4af37] text-black font-extrabold rounded-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 text-xs disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isSubmittingIntake ? "Processing bypass..." : "Bypass & Create Consultation Row (Free Test)"}
+              </button>
+            </div>
+          )}
+
           {/* Payment Method Toggle */}
           <div className="space-y-3.5">
             <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 font-bold block">
@@ -357,7 +380,7 @@ export default function IntakeForm({
           {/* Checkout CTA */}
           <div className="space-y-3.5 pt-2">
             <button
-              onClick={onCompletePayment}
+              onClick={() => onCompletePayment()}
               disabled={isSubmittingIntake}
               className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] hover:scale-[1.01] hover:border-[#d4af37]/20 active:scale-[0.99] text-black font-extrabold rounded-xl transition-all duration-200 text-xs shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
             >

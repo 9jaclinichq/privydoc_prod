@@ -63,16 +63,70 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     options: ["Less than 1 month", "1-3 months", "3-6 months", "Over 6 months"],
     category: "general"
   },
-  // ED Specific
+  
+  // ED Specific (IIEF-5 clinical standards)
   {
-    id: "ed_firmness",
-    text: "Rate your current erection firmness on a scale of 1-4:",
+    id: "ed_confidence",
+    text: "How do you rate your confidence that you can get and keep an erection?",
     type: "radio",
     options: [
-      "1 - Larger but not hard",
-      "2 - Hard but not hard enough for penetration",
-      "3 - Hard enough for penetration but not completely hard",
-      "4 - Completely hard and fully rigid"
+      "1 - Very low confidence",
+      "2 - Low confidence",
+      "3 - Moderate confidence",
+      "4 - High confidence",
+      "5 - Very high confidence"
+    ],
+    category: "ED"
+  },
+  {
+    id: "ed_firmness",
+    text: "When you have erections with sexual stimulation, how often are they hard enough for penetration?",
+    type: "radio",
+    options: [
+      "1 - Almost never or never",
+      "2 - A few times (much less than half the time)",
+      "3 - Sometimes (about half the time)",
+      "4 - Most times (much more than half the time)",
+      "5 - Almost always or always"
+    ],
+    category: "ED"
+  },
+  {
+    id: "ed_maintenance",
+    text: "During sexual intercourse, how often are you able to maintain your erection after penetration?",
+    type: "radio",
+    options: [
+      "1 - Almost never or never",
+      "2 - A few times (much less than half the time)",
+      "3 - Sometimes (about half the time)",
+      "4 - Most times (much more than half the time)",
+      "5 - Almost always or always"
+    ],
+    category: "ED"
+  },
+  {
+    id: "ed_difficulty",
+    text: "During sexual intercourse, how difficult is it to maintain your erection to completion of intercourse?",
+    type: "radio",
+    options: [
+      "1 - Extremely difficult",
+      "2 - Very difficult",
+      "3 - Difficult",
+      "4 - Slightly difficult",
+      "5 - Not difficult"
+    ],
+    category: "ED"
+  },
+  {
+    id: "ed_satisfaction",
+    text: "When you attempt sexual intercourse, how often is it satisfactory for you?",
+    type: "radio",
+    options: [
+      "1 - Almost never or never",
+      "2 - A few times (much less than half the time)",
+      "3 - Sometimes (about half the time)",
+      "4 - Most times (much more than half the time)",
+      "5 - Almost always or always"
     ],
     category: "ED"
   },
@@ -83,7 +137,8 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     options: ["Yes, regularly", "Occasionally", "No, rarely or never"],
     category: "ED"
   },
-  // PE Specific
+
+  // PE Specific (PEDT clinical standards)
   {
     id: "pe_time",
     text: "On average, how quickly do you ejaculate after penetration?",
@@ -91,70 +146,257 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     options: ["Under 1 minute", "1-2 minutes", "3-5 minutes", "More than 5 minutes"],
     category: "PE"
   },
-  // STI Specific
   {
-    id: "sti_symptoms",
-    text: "What symptoms are you experiencing? (Check all that apply)",
-    type: "checkbox",
+    id: "pe_control",
+    text: "How difficult is it for you to delay or control ejaculation during intercourse?",
+    type: "radio",
     options: [
-      "Discharge from the penis",
-      "Sores or ulcers on the genitals",
-      "Burning or pain when urinating",
-      "Itching or irritation",
-      "No symptoms, just want a confidential check"
+      "1 - Extremely difficult / Almost impossible",
+      "2 - Very difficult",
+      "3 - Difficult",
+      "4 - Slightly difficult",
+      "5 - Not difficult"
+    ],
+    category: "PE"
+  },
+  {
+    id: "pe_distress",
+    text: "How much personal distress, frustration, or anxiety does this ejaculation speed cause you?",
+    type: "radio",
+    options: [
+      "Severe distress",
+      "Moderate distress",
+      "Mild distress",
+      "No distress"
+    ],
+    category: "PE"
+  },
+  {
+    id: "pe_partner_distress",
+    text: "How much distress or frustration do you perceive this causes your sexual partner?",
+    type: "radio",
+    options: [
+      "Severe distress",
+      "Moderate distress",
+      "Mild distress",
+      "No distress"
+    ],
+    category: "PE"
+  },
+  {
+    id: "pe_trigger",
+    text: "Does ejaculation occur with very minimal sexual stimulation or prior to penetration?",
+    type: "radio",
+    options: [
+      "Yes, frequently prior to penetration",
+      "Yes, with minimal stimulation",
+      "Occasionally",
+      "No, only after active intercourse"
+    ],
+    category: "PE"
+  },
+
+  // STI Specific (Comprehensive clinical screen)
+  {
+    id: "sti_discharge",
+    text: "Are you experiencing any abnormal discharge from the penis?",
+    type: "radio",
+    options: [
+      "No discharge",
+      "Yes, thick yellow or white discharge",
+      "Yes, green or cloudy discharge",
+      "Yes, watery or clear discharge",
+      "Yes, blood-stained discharge"
     ],
     category: "STI"
   },
-  // LSD Specific
   {
-    id: "lsd_level",
-    text: "How would you describe your current level of sexual desire?",
+    id: "sti_pain",
+    text: "How would you rate the severity of burning or pain when urinating (dysuria)?",
     type: "radio",
-    options: ["Completely absent", "Very low", "Noticeably less than before", "Normal but want to optimize"],
+    options: [
+      "No pain",
+      "Mild irritation / tickle",
+      "Moderate burning",
+      "Severe, intense burning ('broken glass' sensation)"
+    ],
+    category: "STI"
+  },
+  {
+    id: "sti_lesions",
+    text: "Do you have any visible sores, blisters, ulcers, or warts on your genitals or groin?",
+    type: "radio",
+    options: [
+      "No lesions or sores",
+      "Yes, painful blisters or sores",
+      "Yes, painless ulcers or open sores",
+      "Yes, small painless bumps or warts",
+      "Yes, rash or itching redness"
+    ],
+    category: "STI"
+  },
+  {
+    id: "sti_exposure",
+    text: "Have you had a high-risk sexual encounter or a partner with a known infection?",
+    type: "radio",
+    options: [
+      "No known exposure",
+      "Yes, within the last 3 days",
+      "Yes, 3 to 14 days ago",
+      "Yes, 2 to 4 weeks ago",
+      "Yes, more than 4 weeks ago"
+    ],
+    category: "STI"
+  },
+
+  // LSD Specific (Hormonal / Libido screen)
+  {
+    id: "lsd_desire",
+    text: "How would you describe your level of sexual desire (libido) compared to your historical baseline?",
+    type: "radio",
+    options: [
+      "Completely absent",
+      "Severely reduced",
+      "Moderately reduced",
+      "Slightly reduced",
+      "Normal or optimal"
+    ],
     category: "LSD"
   },
-  // GHC Specific
   {
-    id: "ghc_reason",
-    text: "What is the primary reason for your health check-up today?",
+    id: "lsd_energy",
+    text: "Do you experience general low energy, severe daytime fatigue, or lack of motivation?",
     type: "radio",
-    options: ["General wellness review", "Unscreened for several years", "Family history concerns", "Energy / vitality check"],
+    options: [
+      "Yes, chronic and severe fatigue",
+      "Yes, moderate daily fatigue",
+      "Occasionally tired",
+      "No, good energy levels"
+    ],
+    category: "LSD"
+  },
+  {
+    id: "lsd_physical",
+    text: "Have you noticed sudden changes in body composition (e.g., loss of muscle, increased abdominal fat)?",
+    type: "radio",
+    options: [
+      "Yes, significant muscle loss and fat gain",
+      "Yes, mild changes",
+      "No noticeable changes"
+    ],
+    category: "LSD"
+  },
+  {
+    id: "lsd_mood",
+    text: "Are you experiencing persistent low mood, irritability, or brain fog?",
+    type: "radio",
+    options: [
+      "Yes, severe mood changes and brain fog",
+      "Yes, moderate irritability",
+      "Mild/occasional",
+      "No, stable mood"
+    ],
+    category: "LSD"
+  },
+
+  // GHC Specific (General Health Screen)
+  {
+    id: "ghc_pressure",
+    text: "What is your typical or most recent blood pressure range, if known?",
+    type: "radio",
+    options: [
+      "Normal (Below 120/80 mmHg)",
+      "Elevated (120-129/80 mmHg)",
+      "High / Hypertensive (Above 130/80 mmHg)",
+      "Low (Below 90/60 mmHg)",
+      "Unknown (Have not checked recently)"
+    ],
     category: "GHC"
   },
-  // Lifestyle & Safety
+  {
+    id: "ghc_sugar",
+    text: "What is your fasting blood sugar status, if known?",
+    type: "radio",
+    options: [
+      "Normal / Non-diabetic",
+      "Pre-diabetic",
+      "Diabetic (under control)",
+      "Diabetic (poorly controlled)",
+      "Unknown"
+    ],
+    category: "GHC"
+  },
+  {
+    id: "ghc_sleep",
+    text: "How would you rate your average nightly sleep quality?",
+    type: "radio",
+    options: [
+      "Excellent, restful (7-8 hours)",
+      "Average, sleep is decent (5-6 hours)",
+      "Poor, suffer from insomnia or frequent waking",
+      "Severely disrupted / less than 4 hours"
+    ],
+    category: "GHC"
+  },
+  {
+    id: "ghc_cardio",
+    text: "Do you experience abnormal shortness of breath or dizziness when climbing stairs or walking briskly?",
+    type: "radio",
+    options: [
+      "No, never",
+      "Yes, mild shortness of breath",
+      "Yes, severe breathlessness or dizziness"
+    ],
+    category: "GHC"
+  },
+
+  // Lifestyle & Safety (Applied to all)
   {
     id: "medications",
-    text: "Are you currently taking any regular medications, especially blood pressure pills or nitrates?",
+    text: "List all regular medications, supplements, or treatments you are currently taking:",
     type: "text",
-    placeholder: "e.g. Lisinopril, Amlodipine, none, etc.",
+    placeholder: "e.g., Blood pressure meds, multivitamins, None, etc.",
     category: "safety"
   },
   {
     id: "comorbidities",
-    text: "Do you have any existing chronic conditions? (Check all that apply)",
+    text: "Do you have any of the following diagnosed medical conditions? (Select all that apply)",
     type: "checkbox",
     options: [
+      "High Blood Pressure",
       "Diabetes Mellitus",
-      "High Blood Pressure / Hypertension",
       "Heart Disease / Angina",
-      "Sickle Cell Disease",
+      "Sickle Cell Disease or Trait",
+      "Peyronie's Disease (Penile curvature)",
+      "Liver or Kidney disease",
       "None of the above"
     ],
     category: "safety"
   },
   {
-    id: "lifestyle",
-    text: "Briefly describe your general lifestyle (alcohol, smoking, stress levels, exercise):",
-    type: "text",
-    placeholder: "e.g. Moderate alcohol, non-smoker, high stress, light exercise",
+    id: "lifestyle_habits",
+    text: "What are your habits regarding alcohol, smoking, and recreational substances?",
+    type: "radio",
+    options: [
+      "None / Clean habits",
+      "Occasional alcohol, non-smoker",
+      "Regular alcohol, active smoker",
+      "Regular shisha/vape or substances"
+    ],
     category: "safety"
   },
-  // Critical Red Flags
+  {
+    id: "allergies",
+    text: "Do you have any known medical or drug allergies? (e.g., Penicillin, Sildenafil, etc.)",
+    type: "text",
+    placeholder: "e.g., None, Penicillin allergy, Sildenafil headache, etc.",
+    category: "safety"
+  },
   {
     id: "chest_pain",
-    text: "Do you experience any sudden chest pain, shortness of breath, or palpitations during physical activity?",
+    text: "Do you experience any sudden chest pain, chest tightness, or racing pulse during physical exertion?",
     type: "radio",
-    options: ["No, never", "Yes, occasionally", "Yes, frequently"],
+    options: ["No, never", "Yes, occasional chest tightness", "Yes, frequent chest pain/tightness (Emergency warning)"],
     category: "safety"
   }
 ];

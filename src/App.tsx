@@ -341,22 +341,6 @@ export default function App() {
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
   const switchRoleSafely = (targetRole: "patient" | "clinician" | "admin", successAction: () => void) => {
-    if (targetRole === activeTab) {
-      successAction();
-      return;
-    }
-    if (patientSession && activeTab === "patient") {
-      alert("Active Patient Session: Please sign out of your Patient secure vault first to switch roles.");
-      return;
-    }
-    if (currentDoctor && activeTab === "clinician") {
-      alert("Active Clinician Session: Please sign out of your workstation first to switch roles.");
-      return;
-    }
-    if (isAdminAuthenticated && activeTab === "admin") {
-      alert("Active Admin Session: Please sign out of the Admin Office first to switch roles.");
-      return;
-    }
     successAction();
   };
 
@@ -395,8 +379,8 @@ export default function App() {
     }
   };
 
-  // Complete Payment & Save Consultation using real Flutterwave gateway
-  const handleCompletePayment = async () => {
+  // Complete Payment & Save Consultation using real Flutterwave gateway (or bypass in test mode)
+  const handleCompletePayment = async (bypass: boolean = false) => {
     if (!selectedCondition) return;
     setIsSubmittingIntake(true);
 
@@ -408,6 +392,55 @@ export default function App() {
 
     const amount = pricingApi.getById("base_consultation")?.price ?? 7500;
     const tx_ref = `pd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    if (bypass) {
+      console.log("Executing test mode bypass transaction.");
+      try {
+        const res = await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            transaction_id: "pd_bypass_" + Math.random().toString(36).substr(2, 9),
+            tx_ref,
+            amount,
+            payment_type: "new",
+            patient_phone: patientPhone,
+            patient_name: patientName,
+            patient_age: parseInt(patientAge) || 30,
+            condition_title: selectedCondition.title,
+            duration: intakeAnswers["duration"] || "3-6 months",
+            raw_answers: answers
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Server verification of transaction failed.");
+        }
+
+        const data = await res.json();
+        if (data.ok && data.consultation) {
+          const cachedCons = JSON.parse(localStorage.getItem("privydoc_consultations") || "[]");
+          cachedCons.push(data.consultation);
+          localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
+
+          setCheckoutStep("success");
+          setSelectedCase(data.consultation);
+          triggerRefresh();
+        } else {
+          alert(data.message || "Bypass verification failed.");
+        }
+      } catch (e: any) {
+        console.error(e);
+        alert("Bypass error: " + (e.message || "Unknown error"));
+      } finally {
+        setIsSubmittingIntake(false);
+      }
+      return;
+    }
+
     const flwPublicKey = (import.meta as any).env?.VITE_FLW_PUBLIC_KEY || "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
 
     const customerEmail = localStorage.getItem("privydoc_patient_email") || `${patientPhone}@privydoc.com.ng`;
@@ -1116,82 +1149,52 @@ export default function App() {
 
           {/* Luxury Navigation Role Switcher */}
           <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-900">
-            {isAdminAuthenticated ? (
-              /* Active Admin Session - Only show Admin Tab */
-              <button
-                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-rose-600/10 text-rose-400 border border-rose-500/15 cursor-default"
-              >
-                Admin Office Active
-              </button>
-            ) : currentDoctor ? (
-              /* Active Doctor Session - Only show Clinician Tab */
-              <button
-                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15 cursor-default"
-              >
-                Clinician Area Active
-              </button>
-            ) : patientSession ? (
-              /* Active Patient Session - Only show Patient Tab */
-              <button
-                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15 cursor-default"
-              >
-                Patient Vault Active
-              </button>
-            ) : (
-              /* Public View - Show Role Selection Tabs */
-              <>
-                <button
-                  onClick={() => {
-                    switchRoleSafely("patient", () => {
-                      setActiveTab("patient"); 
-                      setPatientSubView("landing"); 
-                      setSelectedCase(null);
-                    });
-                  }}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === "patient" 
-                      ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
-                      : "text-zinc-500 hover:text-zinc-300"
-                  }`}
-                >
-                  Patient Vault
-                </button>
-                {(showHiddenRoles || activeTab === "clinician" || activeTab === "admin") && (
-                  <>
-                    <button
-                      onClick={() => {
-                        switchRoleSafely("clinician", () => {
-                          setActiveTab("clinician"); 
-                          setDocError(""); 
-                          setDocSuccess("");
-                        });
-                      }}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        activeTab === "clinician" 
-                          ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
-                          : "text-zinc-500 hover:text-zinc-300"
-                      }`}
-                    >
-                      Clinician Area
-                    </button>
-                    <button
-                      onClick={() => {
-                        switchRoleSafely("admin", () => {
-                          setActiveTab("admin");
-                        });
-                      }}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        activeTab === "admin" 
-                          ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
-                          : "text-zinc-500 hover:text-rose-400"
-                      }`}
-                    >
-                      Admin Office
-                    </button>
-                  </>
-                )}
-              </>
-            )}
+            <button
+              onClick={() => {
+                switchRoleSafely("patient", () => {
+                  setActiveTab("patient"); 
+                  setPatientSubView("landing"); 
+                  setSelectedCase(null);
+                });
+              }}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === "patient" 
+                  ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Patient Vault {patientSession && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+            </button>
+            <button
+              onClick={() => {
+                switchRoleSafely("clinician", () => {
+                  setActiveTab("clinician"); 
+                  setDocError(""); 
+                  setDocSuccess("");
+                });
+              }}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === "clinician" 
+                  ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Clinician Area {currentDoctor && <span className="w-1.5 h-1.5 rounded-full bg-[#E5C158] animate-pulse" />}
+            </button>
+            <button
+              onClick={() => {
+                switchRoleSafely("admin", () => {
+                  setActiveTab("admin");
+                });
+              }}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === "admin" 
+                  ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
+                  : "text-zinc-500 hover:text-rose-400"
+              }`}
+            >
+              Admin Office {isAdminAuthenticated && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />}
+            </button>
           </nav>
         </header>
 
@@ -1348,11 +1351,11 @@ export default function App() {
                       >
                         <option value="">Select State</option>
                         {[
-                          "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno", 
+                          "Abia", "Abuja (FCT)", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno", 
                           "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", 
                           "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", 
                           "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", 
-                          "Sokoto", "Taraba", "Yobe", "Zamfara", "Abuja FCT"
+                          "Sokoto", "Taraba", "Yobe", "Zamfara"
                         ].map(st => (
                           <option key={st} value={st}>{st}</option>
                         ))}

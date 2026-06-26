@@ -72,17 +72,40 @@ jobs:
           docker build -t gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} .
           docker push gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }}
 
-      - name: Deploy to Cloud Run (Staging Revision - No Traffic)
+      - name: Deploy to Cloud Run (Staging Revision)
         env:
           PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           PROJECT_ID_LOWER=$(echo "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')
+          
+          # 1. Deploy Staging Service (with 100% traffic so we can run smoke tests on it)
+          echo "Deploying to Staging Service: privydoc-app-staging"
           gcloud run deploy privydoc-app-staging \
             --image gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} \
             --platform managed \
             --region ${{ secrets.GCP_REGION }} \
-            --no-traffic \
             --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+          
+          # 2. Deploy Production Service (staged with no traffic, ready for promotion)
+          echo "Deploying to Production Service (No Traffic): privydoc-app"
+          if gcloud run services describe privydoc-app --platform managed --region ${{ secrets.GCP_REGION }} >/dev/null 2>&1; then
+            echo "Service privydoc-app exists. Deploying with --no-traffic."
+            gcloud run deploy privydoc-app \
+              --image gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} \
+              --platform managed \
+              --region ${{ secrets.GCP_REGION }} \
+              --no-traffic \
+              --revision-suffix=${{ github.sha }} \
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+          else
+            echo "Service privydoc-app does not exist yet. Deploying initial revision."
+            gcloud run deploy privydoc-app \
+              --image gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} \
+              --platform managed \
+              --region ${{ secrets.GCP_REGION }} \
+              --revision-suffix=${{ github.sha }} \
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+          fi
 
       - name: Run Staging Smoke Suite
         run: |

@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including devDependencies needed for building & tsx)
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the application files
 COPY . .

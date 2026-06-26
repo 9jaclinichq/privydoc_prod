@@ -602,26 +602,17 @@ export const consultationApi = {
         consultations[index].responded_at = new Date().toISOString();
       }
 
-      // Dispatch patient notification on doctor response
+        // Dispatch patient notification on doctor response
       if (sender === "doctor") {
         const patientPhone = consultations[index].patient_phone;
         const patientName = consultations[index].patient_name || "Patient";
         const doctorName = consultations[index].doctor_name || senderName || "Doctor";
         const condition = consultations[index].condition || "telehealth case";
 
-        const waUrl = `${process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co"}/functions/v1/send-whatsapp`;
-        fetch(waUrl, {
-          method: "POST",
-          headers: {
-            apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "",
-            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            phone: patientPhone,
-            template: "doctor_responded",
-            variables: [patientName, doctorName, condition]
-          })
+        supabaseEdgeFunction("send-whatsapp", {
+          phone: patientPhone,
+          template: "doctor_responded",
+          variables: [patientName, doctorName, condition]
         }).catch(() => {});
 
         // Also insert an in-app notification for the patient
@@ -1418,19 +1409,10 @@ export const adminApi = {
       }).catch(e => {});
 
       // Send WhatsApp notification to the new doctor (fire-and-forget)
-      const waUrl = `${process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co"}/functions/v1/send-whatsapp`;
-      fetch(waUrl, {
-        method: "POST",
-        headers: {
-          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "",
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          phone: toDoc?.phone,
-          template: "new_case_notification",
-          variables: [toDoc?.name, cons.patient_name || "Patient", cons.condition || "telehealth case"]
-        })
+      supabaseEdgeFunction("send-whatsapp", {
+        phone: toDoc?.phone,
+        template: "new_case_notification",
+        variables: [toDoc?.name, cons.patient_name || "Patient", cons.condition || "telehealth case"]
       }).catch(() => {});
     }
 

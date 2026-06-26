@@ -2262,15 +2262,14 @@ app.post("/api/scheduler/apl-check", handleAplCheck);
 const isProd = process.env.NODE_ENV === "production";
 
 if (isProd) {
-  const distPath = path.resolve(process.cwd(), "dist");
-  app.use(express.static(distPath));
+  app.use(express.static(path.join(__dirname, "public")));
   
   app.get("*", (req, res) => {
     // Prevent serving index.html for missing assets or source files
     if (req.path.includes(".") || req.path.startsWith("/src/") || req.path.startsWith("/assets/")) {
       return res.status(404).send("Not Found");
     }
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.sendFile(path.join(__dirname, "public", "index.html"));
   });
 } else {
   // Setup Vite development server middleware

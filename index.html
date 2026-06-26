@@ -13,6 +13,9 @@
     <meta name="apple-mobile-web-app-title" content="PrivyDoc" />
     <link rel="apple-touch-icon" href="/pwa_logo.svg" />
     <link rel="icon" type="image/svg+xml" href="/pwa_logo.svg" />
+    
+    <!-- Flutterwave V3 Inline Checkout Script -->
+    <script src="https://checkout.flutterwave.com/v3.js"></script>
   </head>
   <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div id="root"></div>
@@ -21,11 +24,32 @@
     <!-- Service Worker Registration -->
     <script>
       if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker.register("/sw.js")
-            .then((reg) => console.log("PrivyDoc Service Worker registered successfully:", reg.scope))
-            .catch((err) => console.error("PrivyDoc Service Worker registration failed:", err));
-        });
+        const isDev = window.location.hostname.includes("localhost") || 
+                      window.location.hostname.includes("ais-dev") || 
+                      window.location.hostname.includes("127.0.0.1") ||
+                      window.location.hostname.includes("run.app");
+        if (isDev) {
+          // Forcefully unregister service workers in development to prevent aggressive module caching
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (let registration of registrations) {
+              registration.unregister().then((success) => {
+                if (success) console.log("PrivyDoc: Unregistered development service worker successfully.");
+              });
+            }
+          });
+          // Also clear all caches to remove corrupted dev files
+          if (window.caches) {
+            caches.keys().then((keys) => {
+              keys.forEach((key) => caches.delete(key));
+            });
+          }
+        } else {
+          window.addEventListener("load", () => {
+            navigator.serviceWorker.register("/sw.js")
+              .then((reg) => console.log("PrivyDoc Service Worker registered successfully:", reg.scope))
+              .catch((err) => console.error("PrivyDoc Service Worker registration failed:", err));
+          });
+        }
       }
     </script>
   </body>

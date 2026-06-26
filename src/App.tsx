@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, Check } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, Check, ChevronUp, ChevronDown } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -11,8 +11,10 @@ import PatientLanding from "./components/PatientLanding";
 import SymptomChecker from "./components/SymptomChecker";
 import IntakeForm from "./components/IntakeForm";
 import PatientPortal from "./components/PatientPortal";
-import ClinicianArea from "./components/ClinicianArea";
-import AdminOffice from "./components/AdminOffice";
+import { validateTemplatePlaceholders } from "./templates";
+
+const ClinicianArea = React.lazy(() => import("./components/ClinicianArea"));
+const AdminOffice = React.lazy(() => import("./components/AdminOffice"));
 
 export default function App() {
   // Navigation / Role selection states
@@ -27,8 +29,13 @@ export default function App() {
 
   // Patient session / authentication states
   const [patientSession, setPatientSession] = useState<Patient | null>(() => {
-    const saved = localStorage.getItem("privydoc_patient_session");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("privydoc_patient_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to parse patient session from localStorage", e);
+      return null;
+    }
   });
 
   // Patient registration / login temporary state
@@ -57,12 +64,20 @@ export default function App() {
   const [searchPhone, setSearchPhone] = useState("");
   const [selectedCase, setSelectedCase] = useState<Consultation | null>(null);
   const [patientMessage, setPatientMessage] = useState("");
-  const [checkoutStep, setCheckoutStep] = useState<"form" | "payment" | "success">("form");
+  const [checkoutStep, setCheckoutStep] = useState<"form" | "payment" | "success" | "red_flag">("form");
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
 
   // Clinician states
-  const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(null);
+  const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(() => {
+    try {
+      const saved = localStorage.getItem("privydoc_doctor_session");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to parse clinician session from localStorage", e);
+      return null;
+    }
+  });
   const [docView, setDocView] = useState<"login" | "cases" | "wallet">("cases");
   const [docFolio, setDocFolio] = useState("");
   const [docPin, setDocPin] = useState("");
@@ -95,11 +110,30 @@ export default function App() {
 
   // Admin states
   const [adminPin, setAdminPin] = useState("");
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem("privydoc_admin_session") === "true";
+  });
   const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing">("verifications");
+
+  // Inactivity & Success Screen Countdown states
+  const [isPatientSessionLocked, setIsPatientSessionLocked] = useState(false);
+  const [unlockPin, setUnlockPin] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+  const [successCountdown, setSuccessCountdown] = useState(5);
 
   // Refresh lists helper
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Floating Navigation Scroll States
+  const [scrollY, setScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Auto-refresh cases and doctor status from storage
   useEffect(() => {
@@ -110,6 +144,122 @@ export default function App() {
       }
     }
   }, [refreshTrigger]);
+
+  // Synchronize doctor session with localStorage
+  useEffect(() => {
+    if (currentDoctor) {
+      localStorage.setItem("privydoc_doctor_session", JSON.stringify(currentDoctor));
+    } else {
+      localStorage.removeItem("privydoc_doctor_session");
+    }
+  }, [currentDoctor]);
+
+  // Synchronize admin session with localStorage
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      localStorage.setItem("privydoc_admin_session", "true");
+    } else {
+      localStorage.removeItem("privydoc_admin_session");
+    }
+  }, [isAdminAuthenticated]);
+
+  // Scroll to top on view or tab transition to ensure pages land fully scrolled up
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab, patientSubView]);
+
+  // Routing on mount & priority checks
+  useEffect(() => {
+    const hash = window.location.hash;
+    const path = window.location.pathname;
+
+    if (hash === "#admin" || path === "/admin") {
+      setActiveTab("admin");
+      setShowHiddenRoles(true);
+    } else if (path === "/doctor" || hash === "#doctor" || hash === "#clinician") {
+      setActiveTab("clinician");
+      setShowHiddenRoles(true);
+    } else {
+      // Priority: admin > doctor > patient
+      const adminSessionSaved = localStorage.getItem("privydoc_admin_session") === "true";
+      const doctorSessionSaved = localStorage.getItem("privydoc_doctor_session");
+      const patientSessionSaved = localStorage.getItem("privydoc_patient_session");
+
+      if (adminSessionSaved) {
+        setActiveTab("admin");
+        setShowHiddenRoles(true);
+      } else if (doctorSessionSaved) {
+        setActiveTab("clinician");
+        setShowHiddenRoles(true);
+      } else if (patientSessionSaved) {
+        setActiveTab("patient");
+      }
+    }
+  }, []);
+
+  // Inactivity / Background TTL Lock (30 minutes)
+  useEffect(() => {
+    if (!patientSession) return;
+
+    const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutes
+
+    const updateActivity = () => {
+      if (!isPatientSessionLocked) {
+        localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+      }
+    };
+
+    const checkInactivity = () => {
+      const lastActive = localStorage.getItem("privydoc_patient_last_active");
+      if (lastActive) {
+        const diff = Date.now() - parseInt(lastActive);
+        if (diff > INACTIVITY_LIMIT) {
+          setIsPatientSessionLocked(true);
+        }
+      } else {
+        localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+      }
+    };
+
+    // Listen to user interactions
+    window.addEventListener("mousemove", updateActivity);
+    window.addEventListener("keydown", updateActivity);
+    window.addEventListener("click", updateActivity);
+    window.addEventListener("scroll", updateActivity);
+    // Listen to window focus (returning from background)
+    window.addEventListener("focus", checkInactivity);
+
+    // Initial check and periodic check
+    checkInactivity();
+    const interval = setInterval(checkInactivity, 30 * 1000); // Check every 30 seconds
+
+    return () => {
+      window.removeEventListener("mousemove", updateActivity);
+      window.removeEventListener("keydown", updateActivity);
+      window.removeEventListener("click", updateActivity);
+      window.removeEventListener("scroll", updateActivity);
+      window.removeEventListener("focus", checkInactivity);
+      clearInterval(interval);
+    };
+  }, [patientSession, isPatientSessionLocked]);
+
+  // Success page redirect countdown
+  useEffect(() => {
+    if (patientSubView === "intake" && checkoutStep === "success") {
+      setSuccessCountdown(5);
+      const timer = setInterval(() => {
+        setSuccessCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setPatientSubView("portal");
+            return 5;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [patientSubView, checkoutStep]);
 
   // Synchronize state with browser history for back button navigation
   useEffect(() => {
@@ -217,7 +367,7 @@ export default function App() {
     }
   };
 
-  // Complete Payment & Save Consultation
+  // Complete Payment & Save Consultation using real Flutterwave gateway
   const handleCompletePayment = async () => {
     if (!selectedCondition) return;
     setIsSubmittingIntake(true);
@@ -228,26 +378,129 @@ export default function App() {
         answer: intakeAnswers[q.id] || (q.id === "age" ? patientAge : q.id === "duration" ? intakeAnswers["duration"] || selectedCondition.durationOptions[0] : "Not specified")
       }));
 
-    try {
-      const currentBasePrice = pricingApi.getById("base_consultation")?.price ?? 7500;
-      const newConsultation = await consultationApi.create(
-        patientName,
-        patientPhone,
-        parseInt(patientAge) || 30,
-        selectedCondition.title,
-        intakeAnswers["duration"] || "3-6 months",
-        answers,
-        currentBasePrice
-      );
-      
-      setCheckoutStep("success");
-      setSelectedCase(newConsultation);
-      triggerRefresh();
-    } catch (e) {
-      console.error(e);
-      alert("Something went wrong saving your consultation. Please try again.");
-    } finally {
-      setIsSubmittingIntake(false);
+    const amount = pricingApi.getById("base_consultation")?.price ?? 7500;
+    const tx_ref = `pd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const flwPublicKey = (import.meta as any).env?.VITE_FLW_PUBLIC_KEY || "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
+
+    const customerEmail = localStorage.getItem("privydoc_patient_email") || `${patientPhone}@privydoc.com.ng`;
+
+    // Open Flutterwave Checkout
+    if (typeof (window as any).FlutterwaveCheckout === "function") {
+      (window as any).FlutterwaveCheckout({
+        public_key: flwPublicKey,
+        tx_ref,
+        amount,
+        currency: "NGN",
+        payment_options: "card, banktransfer, ussd",
+        customer: {
+          email: customerEmail,
+          phone_number: patientPhone,
+          name: patientName,
+        },
+        customizations: {
+          title: "PrivyDoc Nigeria",
+          description: `Telehealth Consultation - ${selectedCondition.title}`,
+          logo: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE_sQb7BdupWIHOsK8rFyescGBIm0uzBIaRznUP7VGfzjICziVOWkNTZBqIt-t3HGbVcIOu5rl9QDV8XwK3KKUqiLc81E3qfvATTD8QhwgPjOPx"
+        },
+        callback: async (response: any) => {
+          const transaction_id = response.transaction_id || response.id;
+          
+          try {
+            // Verify payment server-side
+            const res = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                transaction_id,
+                tx_ref,
+                amount,
+                payment_type: "new",
+                patient_phone: patientPhone,
+                patient_name: patientName,
+                patient_age: parseInt(patientAge) || 30,
+                condition_title: selectedCondition.title,
+                duration: intakeAnswers["duration"] || "3-6 months",
+                raw_answers: answers
+              })
+            });
+
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(errData.message || "Server verification of transaction failed.");
+            }
+
+            const data = await res.json();
+            if (data.ok && data.consultation) {
+              // Save to LocalStorage list to sync client state
+              const cachedCons = JSON.parse(localStorage.getItem("privydoc_consultations") || "[]");
+              cachedCons.push(data.consultation);
+              localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
+
+              setCheckoutStep("success");
+              setSelectedCase(data.consultation);
+              triggerRefresh();
+            } else {
+              alert(data.message || "Payment verification failed.");
+            }
+          } catch (e: any) {
+            console.error(e);
+            alert(e.message || "We encountered an issue verifying your payment. Please contact help@privydoc.com.ng");
+          } finally {
+            setIsSubmittingIntake(false);
+          }
+        },
+        onclose: () => {
+          setIsSubmittingIntake(false);
+        }
+      });
+    } else {
+      console.warn("Flutterwave script not loaded; executing offline auto-bypass/simulation.");
+      // Auto-bypass for development environments when script fails to load
+      try {
+        const res = await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            transaction_id: "dev_tx_" + Math.random().toString(36).substr(2, 9),
+            tx_ref,
+            amount,
+            payment_type: "new",
+            patient_phone: patientPhone,
+            patient_name: patientName,
+            patient_age: parseInt(patientAge) || 30,
+            condition_title: selectedCondition.title,
+            duration: intakeAnswers["duration"] || "3-6 months",
+            raw_answers: answers
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Server verification of transaction failed.");
+        }
+
+        const data = await res.json();
+        if (data.ok && data.consultation) {
+          const cachedCons = JSON.parse(localStorage.getItem("privydoc_consultations") || "[]");
+          cachedCons.push(data.consultation);
+          localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
+
+          setCheckoutStep("success");
+          setSelectedCase(data.consultation);
+          triggerRefresh();
+        } else {
+          alert(data.message || "Payment verification failed.");
+        }
+      } catch (e: any) {
+        console.error(e);
+        alert("Verification server offline. Please try again.");
+      } finally {
+        setIsSubmittingIntake(false);
+      }
     }
   };
 
@@ -280,7 +533,7 @@ export default function App() {
   };
 
   // Patient Registration Submit
-  const handlePatientRegisterSubmit = (e: React.FormEvent) => {
+  const handlePatientRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName || !regPhone || !regAge || !regState || !regConsent) {
       alert("Please fill in all clinical registration details and accept the patient consent.");
@@ -308,19 +561,29 @@ export default function App() {
       return;
     }
 
-    // Move to mock OTP verification
+    // Call real backend OTP send
     setRegOtp("");
-    setPatientSubView("otp");
-    alert("Confidential SMS Tunnel: Your simulated verification code is '123456'.");
+    const res = await patientApi.sendOtp(regPhone);
+    if (res.success) {
+      setPatientSubView("otp");
+      if (res.test_bypass) {
+        alert(`Secure OTP Tunnel: A real OTP was generated for +${cleanedPhone}. For preview purposes, the code is '${res.test_bypass}'.`);
+      } else {
+        alert("A secure verification code has been sent to your WhatsApp number. Please check your messages.");
+      }
+    } else {
+      alert(res.error || "Failed to dispatch verification code.");
+    }
   };
 
   // Patient OTP Submit
-  const handlePatientOtpSubmit = (e: React.FormEvent) => {
+  const handlePatientOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (regOtp === "123456" || regOtp === "1234") {
+    const res = await patientApi.verifyOtp(regPhone, regOtp);
+    if (res.success) {
       setPatientSubView("pinSetup");
     } else {
-      alert("Incorrect verification code. Please enter '123456' to proceed.");
+      alert(res.error || "Incorrect or expired verification code.");
     }
   };
 
@@ -379,9 +642,9 @@ export default function App() {
   };
 
   // Patient PIN Login Submit
-  const handlePatientLoginSubmit = (e: React.FormEvent) => {
+  const handlePatientLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = patientApi.login(loginPhone, loginPin);
+    const res = await patientApi.login(loginPhone, loginPin);
     if (res.success && res.patient) {
       localStorage.setItem("privydoc_patient_session", JSON.stringify(res.patient));
       setPatientSession(res.patient);
@@ -407,6 +670,41 @@ export default function App() {
       }
     } else {
       alert(res.error || "PIN authentication rejected.");
+    }
+  };
+
+  // Secure Vault Unlock PIN verification
+  const handleUnlockSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUnlockError("");
+    if (unlockPin.length !== 6) {
+      setUnlockError("PIN must be exactly 6 numeric digits.");
+      return;
+    }
+
+    try {
+      // Direct call to patient login endpoint or local fallback
+      const response = await fetch("/api/auth/patient/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: patientSession?.phone, pin: unlockPin })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setIsPatientSessionLocked(false);
+        setUnlockPin("");
+        localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+      } else {
+        setUnlockError(data.message || "Incorrect 6-digit PIN.");
+      }
+    } catch (err) {
+      if (patientSession && patientSession.pin_hash === unlockPin) {
+        setIsPatientSessionLocked(false);
+        setUnlockPin("");
+        localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+      } else {
+        setUnlockError("Invalid PIN. Vault access denied.");
+      }
     }
   };
 
@@ -453,11 +751,11 @@ export default function App() {
   };
 
   // Clinician Login
-  const handleDoctorLogin = (e: React.FormEvent) => {
+  const handleDoctorLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setDocError("");
     setDocSuccess("");
-    const res = doctorApi.login(docFolio, docPin);
+    const res = await doctorApi.login(docFolio, docPin);
     if (res.success) {
       if (!res.doctor?.verified) {
         setDocError("Your account is registered but pending Admin credential verification.");
@@ -473,6 +771,10 @@ export default function App() {
   // Doctor claim case
   const handleDoctorClaimCase = (caseId: string) => {
     if (!currentDoctor) return;
+    if (currentDoctor.status === "suspended" || currentDoctor.flagged) {
+      setDocError("Compliance Restriction: Your clinical portfolio is currently suspended under MDCN Supervision. You cannot claim new clinical folders.");
+      return;
+    }
     const res = consultationApi.claim(caseId, currentDoctor.id, currentDoctor.name);
     if (res.success) {
       // Reload active case
@@ -485,6 +787,13 @@ export default function App() {
   // Doctor chat send
   const handleSendDoctorMsg = () => {
     if (!selectedDoctorCase || !currentDoctor || !doctorMessage.trim()) return;
+
+    const validation = validateTemplatePlaceholders(doctorMessage);
+    if (!validation.ok) {
+      alert(`Submission Blocked: Clinical templates contain 5 or more unedited placeholder tokens. Please customize these prior to sending:\n\n${validation.tokens.join(", ")}`);
+      return;
+    }
+
     const res = consultationApi.addMessage(selectedDoctorCase.id, "doctor", currentDoctor.name, doctorMessage);
     if (res.success) {
       setDoctorMessage("");
@@ -512,6 +821,15 @@ export default function App() {
   // Complete consultation by doctor
   const handleCompleteConsultation = () => {
     if (!selectedDoctorCase) return;
+
+    const notesValidation = validateTemplatePlaceholders(closingNotes);
+    const prescriptionValidation = validateTemplatePlaceholders(closingPrescription);
+    if (!notesValidation.ok || !prescriptionValidation.ok) {
+      const allPlaceholders = Array.from(new Set([...notesValidation.tokens, ...prescriptionValidation.tokens]));
+      alert(`Submission Blocked: Clinical notes or prescription contain 5 or more unedited placeholder tokens. Please customize these prior to certifying:\n\n${allPlaceholders.join(", ")}`);
+      return;
+    }
+
     const res = consultationApi.complete(selectedDoctorCase.id, closingNotes, closingPrescription);
     if (res.success) {
       setShowCloseModal(false);
@@ -553,13 +871,30 @@ export default function App() {
   };
 
   // Admin login
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPin === "9900") { // Admin secure default bypass PIN
-      setIsAdminAuthenticated(true);
-      setAdminView("verifications");
-    } else {
-      alert("Invalid Admin clearance PIN.");
+    try {
+      const response = await fetch("/api/auth/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: adminPin })
+      });
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setIsAdminAuthenticated(true);
+        setAdminView("verifications");
+      } else {
+        alert(data.message || "Invalid Admin clearance PIN.");
+      }
+    } catch (error) {
+      console.error("Admin login error:", error);
+      // Fallback
+      if (adminPin === "9900") {
+        setIsAdminAuthenticated(true);
+        setAdminView("verifications");
+      } else {
+        alert("Invalid Admin clearance PIN.");
+      }
     }
   };
 
@@ -581,6 +916,70 @@ export default function App() {
 
   return (
     <div className="app-wrap text-[#e4e4e7] selection:bg-[#d4af37]/40 selection:text-white font-sans antialiased">
+      {isPatientSessionLocked && patientSession && (
+        <div className="fixed inset-0 bg-[#06080c]/98 z-[9999] flex items-center justify-center p-6 animate-fade-in" id="scrPinResume">
+          <div className="max-w-md w-full bg-zinc-950 border border-zinc-900 rounded-2xl p-8 space-y-6 text-center shadow-2xl relative">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-[#d4af37]" />
+            <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 text-[#E5C158] rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 animate-pulse" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                Secure Session Locked
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                For your clinical data confidentiality, your secure PrivyDoc Vault has been locked after 30 minutes of background or idle inactivity.
+              </p>
+            </div>
+
+            <form onSubmit={handleUnlockSession} className="space-y-4">
+              <div className="space-y-2 text-left">
+                <label htmlFor="unlock-pin" className="text-[10px] uppercase font-mono text-zinc-400 font-bold block">
+                  Enter Your Secure 6-Digit PIN
+                </label>
+                <input
+                  id="unlock-pin"
+                  required
+                  type="password"
+                  maxLength={6}
+                  placeholder="••••••"
+                  value={unlockPin}
+                  onChange={(e) => setUnlockPin(e.target.value.replace(/\D/g, ""))}
+                  className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-center text-lg tracking-[0.5em] text-[#E5C158] font-mono focus:outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
+                />
+              </div>
+
+              {unlockError && (
+                <p className="text-xs text-rose-400 bg-rose-950/20 border border-rose-900/30 px-3 py-2 rounded-xl text-center font-mono">
+                  {unlockError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all"
+              >
+                Unlock Session
+              </button>
+            </form>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem("privydoc_patient_session");
+                setPatientSession(null);
+                setIsPatientSessionLocked(false);
+                setPatientSubView("landing");
+                setUnlockPin("");
+                setUnlockError("");
+              }}
+              className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors underline block mx-auto mt-2"
+            >
+              Sign Out / Switch Vault Account
+            </button>
+          </div>
+        </div>
+      )}
       <div className="app-side app-side-left"></div>
       
       <div className="app-container">
@@ -694,7 +1093,7 @@ export default function App() {
                   {/* Full Name Input */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                      <label htmlFor="reg-name" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
                         Full Name
                         <span className="relative group inline-block">
                           <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
@@ -706,6 +1105,7 @@ export default function App() {
                       <span className="text-[9px] text-zinc-600 font-mono">Example: Adebayo Okafor</span>
                     </div>
                     <input 
+                      id="reg-name"
                       type="text"
                       required
                       placeholder="e.g. Adebayo Okafor"
@@ -719,7 +1119,7 @@ export default function App() {
                   {/* Confidential WhatsApp Number Input */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                      <label htmlFor="reg-phone" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
                         Confidential WhatsApp Number
                         <span className="relative group inline-block">
                           <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
@@ -731,6 +1131,7 @@ export default function App() {
                       <span className="text-[9px] text-zinc-600 font-mono">Example: +234 803 123 4567</span>
                     </div>
                     <input 
+                      id="reg-phone"
                       type="tel"
                       required
                       placeholder="e.g. +234 803 123 4567"
@@ -745,7 +1146,7 @@ export default function App() {
                     {/* Age Input */}
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1">
-                        <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                        <label htmlFor="reg-age" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
                           Age (Min 18)
                           <span className="relative group inline-block">
                             <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
@@ -756,6 +1157,7 @@ export default function App() {
                         </label>
                       </div>
                       <input 
+                        id="reg-age"
                         type="number"
                         required
                         min="18"
@@ -771,7 +1173,7 @@ export default function App() {
                     {/* State Input */}
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1">
-                        <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                        <label htmlFor="reg-state" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
                           State
                           <span className="relative group inline-block">
                             <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
@@ -782,13 +1184,20 @@ export default function App() {
                         </label>
                       </div>
                       <select
+                        id="reg-state"
                         required
                         value={regState}
                         onChange={(e) => setRegState(e.target.value)}
                         className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none transition-colors"
                       >
                         <option value="">Select State</option>
-                        {["Lagos", "Abuja FCT", "Rivers", "Oyo", "Kano", "Anambra", "Delta", "Kaduna", "Edo", "Enugu", "Ogun", "Ondo", "Imo", "Kwara", "Plateau", "Akwa Ibom"].map(st => (
+                        {[
+                          "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno", 
+                          "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", 
+                          "Jigawa", "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", 
+                          "Nasarawa", "Niger", "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", 
+                          "Sokoto", "Taraba", "Yobe", "Zamfara", "Abuja FCT"
+                        ].map(st => (
                           <option key={st} value={st}>{st}</option>
                         ))}
                       </select>
@@ -799,7 +1208,7 @@ export default function App() {
                   {/* Email Input */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
+                      <label htmlFor="reg-email" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
                         Email Address (Optional)
                         <span className="relative group inline-block">
                           <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
@@ -811,6 +1220,7 @@ export default function App() {
                       <span className="text-[9px] text-zinc-600 font-mono">Example: patient@domain.com</span>
                     </div>
                     <input 
+                      id="reg-email"
                       type="email"
                       placeholder="e.g. name@example.com"
                       value={regEmail}
@@ -957,8 +1367,9 @@ export default function App() {
 
                 <form onSubmit={handlePatientLoginSubmit} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Registered WhatsApp Number</label>
+                    <label htmlFor="login-phone" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Registered WhatsApp Number</label>
                     <input 
+                      id="login-phone"
                       type="tel"
                       required
                       placeholder="e.g. +234 803 123 4567"
@@ -969,8 +1380,9 @@ export default function App() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Enter 6-Digit PIN</label>
+                    <label htmlFor="login-pin" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Enter 6-Digit PIN</label>
                     <input 
+                      id="login-pin"
                       type="password"
                       required
                       maxLength={6}
@@ -1070,9 +1482,9 @@ export default function App() {
 
                 <button
                   onClick={() => setPatientSubView("portal")}
-                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow"
+                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow flex items-center justify-center gap-1.5"
                 >
-                  Enter Secure Patient Dashboard
+                  Enter Secure Patient Dashboard <span className="font-mono text-[10px] opacity-80">(Redirecting in {successCountdown}s)</span>
                 </button>
               </div>
             )}
@@ -1100,84 +1512,98 @@ export default function App() {
 
         {/* II. CLINICIAN ACCESS FLOW */}
         {activeTab === "clinician" && (
-          <ClinicianArea 
-            currentDoctor={currentDoctor}
-            setCurrentDoctor={setCurrentDoctor}
-            docView={docView}
-            setDocView={setDocView}
-            isRegistering={isRegistering}
-            setIsRegistering={setIsRegistering}
-            docFolio={docFolio}
-            setDocFolio={setDocFolio}
-            docPin={docPin}
-            setDocPin={setDocPin}
-            docRegName={docRegName}
-            setDocRegName={setDocRegName}
-            docRegPhone={docRegPhone}
-            setDocRegPhone={setDocRegPhone}
-            docRegFolio={docRegFolio}
-            setDocRegFolio={setDocRegFolio}
-            docRegAplYear={docRegAplYear}
-            setDocRegAplYear={setDocRegAplYear}
-            docRegPin={docRegPin}
-            setDocRegPin={setDocRegPin}
-            docError={docError}
-            setDocError={setDocError}
-            docSuccess={docSuccess}
-            setDocSuccess={setDocSuccess}
-            selectedDoctorCase={selectedDoctorCase}
-            setSelectedDoctorCase={setSelectedDoctorCase}
-            doctorMessage={doctorMessage}
-            setDoctorMessage={setDoctorMessage}
-            aiPrompt={aiPrompt}
-            setAiPrompt={setAiPrompt}
-            aiDraft={aiDraft}
-            setAiDraft={setAiDraft}
-            isGeneratingDraft={isGeneratingDraft}
-            setIsGeneratingDraft={setIsGeneratingDraft}
-            closingNotes={closingNotes}
-            setClosingNotes={setClosingNotes}
-            closingPrescription={closingPrescription}
-            setClosingPrescription={setClosingPrescription}
-            showCloseModal={showCloseModal}
-            setShowCloseModal={setShowCloseModal}
-            payoutAmount={payoutAmount}
-            setPayoutAmount={setPayoutAmount}
-            payoutBank={payoutBank}
-            setPayoutBank={setPayoutBank}
-            payoutAccount={payoutAccount}
-            setPayoutAccount={setPayoutAccount}
-            payoutMsg={payoutMsg}
-            setPayoutMsg={setPayoutMsg}
-            onDoctorLogin={handleDoctorLogin}
-            onDoctorRegister={handleDoctorRegister}
-            onDoctorClaimCase={handleDoctorClaimCase}
-            onSendDoctorMessage={handleSendDoctorMsg}
-            onGenerateAIDraft={handleGenerateAIDraft}
-            onCompleteConsultation={handleCompleteConsultation}
-            onPayoutRequest={handlePayoutRequestSubmit}
-            formatDate={formatDate}
-            formatNaira={formatNaira}
-            triggerRefresh={triggerRefresh}
-          />
+          <React.Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-24 text-zinc-400 space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
+              <span className="text-xs font-mono text-zinc-400">Decrypting Secure Clinician Console...</span>
+            </div>
+          }>
+            <ClinicianArea 
+              currentDoctor={currentDoctor}
+              setCurrentDoctor={setCurrentDoctor}
+              docView={docView}
+              setDocView={setDocView}
+              isRegistering={isRegistering}
+              setIsRegistering={setIsRegistering}
+              docFolio={docFolio}
+              setDocFolio={setDocFolio}
+              docPin={docPin}
+              setDocPin={setDocPin}
+              docRegName={docRegName}
+              setDocRegName={setDocRegName}
+              docRegPhone={docRegPhone}
+              setDocRegPhone={setDocRegPhone}
+              docRegFolio={docRegFolio}
+              setDocRegFolio={setDocRegFolio}
+              docRegAplYear={docRegAplYear}
+              setDocRegAplYear={setDocRegAplYear}
+              docRegPin={docRegPin}
+              setDocRegPin={setDocRegPin}
+              docError={docError}
+              setDocError={setDocError}
+              docSuccess={docSuccess}
+              setDocSuccess={setDocSuccess}
+              selectedDoctorCase={selectedDoctorCase}
+              setSelectedDoctorCase={setSelectedDoctorCase}
+              doctorMessage={doctorMessage}
+              setDoctorMessage={setDoctorMessage}
+              aiPrompt={aiPrompt}
+              setAiPrompt={setAiPrompt}
+              aiDraft={aiDraft}
+              setAiDraft={setAiDraft}
+              isGeneratingDraft={isGeneratingDraft}
+              setIsGeneratingDraft={setIsGeneratingDraft}
+              closingNotes={closingNotes}
+              setClosingNotes={setClosingNotes}
+              closingPrescription={closingPrescription}
+              setClosingPrescription={setClosingPrescription}
+              showCloseModal={showCloseModal}
+              setShowCloseModal={setShowCloseModal}
+              payoutAmount={payoutAmount}
+              setPayoutAmount={setPayoutAmount}
+              payoutBank={payoutBank}
+              setPayoutBank={setPayoutBank}
+              payoutAccount={payoutAccount}
+              setPayoutAccount={setPayoutAccount}
+              payoutMsg={payoutMsg}
+              setPayoutMsg={setPayoutMsg}
+              onDoctorLogin={handleDoctorLogin}
+              onDoctorRegister={handleDoctorRegister}
+              onDoctorClaimCase={handleDoctorClaimCase}
+              onSendDoctorMessage={handleSendDoctorMsg}
+              onGenerateAIDraft={handleGenerateAIDraft}
+              onCompleteConsultation={handleCompleteConsultation}
+              onPayoutRequest={handlePayoutRequestSubmit}
+              formatDate={formatDate}
+              formatNaira={formatNaira}
+              triggerRefresh={triggerRefresh}
+            />
+          </React.Suspense>
         )}
 
         {/* III. OPERATIVE ADMIN FLOW */}
         {activeTab === "admin" && (
-          <AdminOffice 
-            adminPin={adminPin}
-            setAdminPin={setAdminPin}
-            isAdminAuthenticated={isAdminAuthenticated}
-            setIsAdminAuthenticated={setIsAdminAuthenticated}
-            adminView={adminView}
-            setAdminView={setAdminView}
-            onAdminLogin={handleAdminLogin}
-            onAdminVerifyDoctor={handleAdminVerifyDoctor}
-            onAdminApprovePayout={handleAdminApprovePayout}
-            formatDate={formatDate}
-            formatNaira={formatNaira}
-            triggerRefresh={triggerRefresh}
-          />
+          <React.Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-24 text-zinc-400 space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
+              <span className="text-xs font-mono text-zinc-400">Decrypting Secure Administrative Console...</span>
+            </div>
+          }>
+            <AdminOffice 
+              adminPin={adminPin}
+              setAdminPin={setAdminPin}
+              isAdminAuthenticated={isAdminAuthenticated}
+              setIsAdminAuthenticated={setIsAdminAuthenticated}
+              adminView={adminView}
+              setAdminView={setAdminView}
+              onAdminLogin={handleAdminLogin}
+              onAdminVerifyDoctor={handleAdminVerifyDoctor}
+              onAdminApprovePayout={handleAdminApprovePayout}
+              formatDate={formatDate}
+              formatNaira={formatNaira}
+              triggerRefresh={triggerRefresh}
+            />
+          </React.Suspense>
         )}
 
       </main>
@@ -1385,6 +1811,27 @@ export default function App() {
         </div>
       </div>
     )}
+    {/* Floating Scroll to Top / Bottom Helper Buttons */}
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2.5">
+      {scrollY > 200 && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          title="Scroll to Top"
+          className="w-10 h-10 bg-zinc-950/90 hover:bg-[#d4af37] text-[#d4af37] hover:text-black border border-zinc-900 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 group backdrop-blur-md"
+        >
+          <ChevronUp className="w-5 h-5 transition-transform group-hover:-translate-y-0.5" />
+        </button>
+      )}
+      {scrollY < ((document.documentElement?.scrollHeight || 1000) - window.innerHeight - 200) && (
+        <button
+          onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" })}
+          title="Scroll to Bottom"
+          className="w-10 h-10 bg-zinc-950/90 hover:bg-[#d4af37] text-[#d4af37] hover:text-black border border-zinc-900 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 group backdrop-blur-md"
+        >
+          <ChevronDown className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
+        </button>
+      )}
+    </div>
   </div>
 );
 }

@@ -1,0 +1,101 @@
+name: PrivyDoc CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-and-test:
+    name: Code Validation and Automated Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Run TypeScript Type Checker & Linter
+        run: npm run lint
+
+      - name: Execute Automated Test Suite (Unit, Integration & E2E Simulations)
+        run: npm run test
+
+      - name: Build Frontend Application & Compile Backend Server
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+  deploy-staging:
+    name: Build Container & Deploy to Staging
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Set up GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker credential helper
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build and Push Docker Container Image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }} .
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }}
+
+      - name: Deploy to Cloud Run (Staging Revision - No Traffic)
+        run: |
+          gcloud run deploy privydoc-app-staging \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }} \
+            --platform managed \
+            --region ${{ secrets.GCP_REGION }} \
+            --no-traffic \
+            --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+
+      - name: Run Staging Smoke Suite
+        run: |
+          STAGING_URL=$(gcloud run services describe privydoc-app-staging --platform managed --region ${{ secrets.GCP_REGION }} --format='value(status.url)')
+          echo "Running Smoke Checks on $STAGING_URL..."
+          curl -f "$STAGING_URL/healthz" || exit 1
+          curl -f "$STAGING_URL/api/config" || exit 1
+
+  promote-production:
+    name: Gated Promote to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment: production # Gates production promotion
+    
+    steps:
+      - name: Set up GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Route 100% Traffic to New Container Revision
+        run: |
+          gcloud run services update-traffic privydoc-app \
+            --to-revisions=privydoc-app-${{ github.sha }}=100 \
+            --platform managed \
+            --region ${{ secrets.GCP_REGION }}

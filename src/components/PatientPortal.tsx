@@ -5,8 +5,9 @@ import {
   LineChart, Compass, Wallet, Settings, Clock, Heart, ClipboardCheck
 } from "lucide-react";
 import { Consultation } from "../types";
-import { jsPDF } from "jspdf";
 import { renderRichText } from "../utils";
+
+import { generateConsultationPDF } from "../utils/pdfGenerator";
 
 interface PatientPortalProps {
   selectedCase: Consultation | null;
@@ -40,152 +41,41 @@ export default function PatientPortal({
   // Sidebar state
   const [activeSidebarTab, setActiveSidebarTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "payments">("dashboard");
 
+  // Dispute states
+  const [disputeSubmitted, setDisputeSubmitted] = useState<boolean>(false);
+  const [openDisputeForm, setOpenDisputeForm] = useState<boolean>(false);
+  const [disputeCategory, setDisputeCategory] = useState<string>("Incorrect prescription advice / dose discrepancy");
+  const [disputeReason, setDisputeReason] = useState<string>("Doctor did not prescribe the expected medication.");
+  const [submittingDispute, setSubmittingDispute] = useState<boolean>(false);
+  const [disputeError, setDisputeError] = useState<string>("Invalid input.");
+
+  React.useEffect(() => {
+    if (selectedCase?.id) {
+      setDisputeSubmitted(false);
+      setDisputeReason("");
+      setDisputeError("");
+      fetch(`/api/data/disputes?consultation_id=eq.${selectedCase.id}`, {
+        headers: {
+          "x-patient-phone": selectedCase.patient_phone || ""
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          const hasActiveDispute = data.some(d => d.status !== "resolved");
+          if (hasActiveDispute) {
+            setDisputeSubmitted(true);
+          }
+        }
+      })
+      .catch(e => console.error("Could not load dispute logs:", e));
+    }
+  }, [selectedCase]);
+
   // Dynamic PDF download function
-  const triggerDownloadPDF = (con: Consultation) => {
+  const triggerDownloadPDF = async (con: Consultation) => {
     try {
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      // Background elegant light cream/gray tint for the official clinical prescription sheet
-      doc.setFillColor(252, 252, 252);
-      doc.rect(0, 0, 210, 297, "F");
-
-      // Shimmer gold border accent
-      doc.setDrawColor(212, 175, 55); 
-      doc.setLineWidth(1);
-      doc.rect(6, 6, 198, 285);
-
-      // Top brand lines
-      doc.setDrawColor(21, 21, 21);
-      doc.setLineWidth(0.4);
-      doc.line(12, 34, 198, 34);
-
-      // Platform Logo text
-      doc.setTextColor(21, 21, 21);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(26);
-      doc.text("PRIVYDOC", 14, 24);
-
-      // Gold Subheading
-      doc.setTextColor(184, 134, 11);
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(9);
-      doc.text("DISCREET TELEMEDICINE & CLINICAL PRESCRIPTIONS", 14, 29);
-
-      // Document Meta Block (Right Side)
-      doc.setTextColor(115, 115, 115);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.text(`Official Document ID: PD-RX-${con.id.toUpperCase()}`, 125, 19);
-      doc.text(`Date of Issue: ${formatDate(con.updated_at).split(",")[0]}`, 125, 23);
-      doc.text(`License Body: Verified Telemedicine Portal`, 125, 27);
-
-      // Gold separator line
-      doc.setDrawColor(212, 175, 55);
-      doc.setLineWidth(0.8);
-      doc.line(14, 36, 196, 36);
-
-      // Section: Demographic file card
-      doc.setFillColor(245, 245, 247);
-      doc.rect(14, 42, 182, 24, "F");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(21, 21, 21);
-      doc.text("CONFIDENTIAL MEDICAL RECORD PROFILE", 18, 48);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(64, 64, 64);
-      doc.text(`Patient Name: ${con.patient_name}`, 18, 54);
-      doc.text(`Age DOB ref: ${con.patient_age} years`, 18, 59);
-      doc.text(`Clinical Complaint: ${con.condition}`, 115, 54);
-      doc.text(`Assigned Clinician: ${con.doctor_name || "Certified Medical Practitioner"}`, 115, 59);
-
-      // Section: Diagnostic Brief Notes
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.setTextColor(184, 134, 11);
-      doc.text("CLINICAL EVALUATION NOTES", 14, 76);
-
-      doc.setDrawColor(229, 229, 229);
-      doc.setLineWidth(0.5);
-      doc.line(14, 79, 196, 79);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(64, 64, 64);
-
-      const evalNotesRaw = con.doctor_notes || `Patient presented symptoms of ${con.condition} over a recorded duration of ${con.duration}. Digital intake was thoroughly analyzed for systemic cardiovascular contraindications. Patient exhibits normal respiratory/exercise parameters with no chest pain or nitrate interactions reported. Prescribing support remedies as appropriate.`;
-      const evalNotes = evalNotesRaw
-        .replace(/\*\*/g, "")
-        .replace(/\*/g, "")
-        .replace(/•/g, "  - ");
-      const splitNotes = doc.splitTextToSize(evalNotes, 178);
-      doc.text(splitNotes, 14, 85);
-
-      const notesYHeight = splitNotes.length * 4.8;
-
-      // Section: Official Prescription (Rx)
-      const rxHeaderY = 93 + notesYHeight;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.setTextColor(184, 134, 11);
-      doc.text("OFFICIAL PHARMACEUTICAL Rx", 14, rxHeaderY);
-
-      doc.line(14, rxHeaderY + 3, 196, rxHeaderY + 3);
-
-      // Huge Rx symbol
-      doc.setFont("times", "bolditalic");
-      doc.setFontSize(36);
-      doc.setTextColor(212, 175, 55);
-      doc.text("Rx", 14, rxHeaderY + 18);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(21, 21, 21);
-
-      const prescriptionBodyRaw = con.prescription || "Clinical prescription not required at this time. Recommended: Daily exercise and pelvic floor support.";
-      const prescriptionBody = prescriptionBodyRaw
-        .replace(/\*\*/g, "")
-        .replace(/\*/g, "")
-        .replace(/•/g, "  - ");
-      const splitPrescription = doc.splitTextToSize(prescriptionBody, 155);
-      doc.text(splitPrescription, 32, rxHeaderY + 12);
-
-      // Stamp section / cryptographic seal
-      const stampY = 240;
-      doc.setFillColor(254, 254, 247);
-      doc.setDrawColor(212, 175, 55);
-      doc.rect(14, stampY, 182, 32, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(184, 134, 11);
-      doc.text("VERIFIED CLINICAL E-PRESCRIPTION", 18, stampY + 7);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(115, 115, 115);
-      doc.text("This electronic record has been secured with 256-bit AES encryption. Professional validity confirmed for the current cycle.", 18, stampY + 12);
-      doc.text(`Prescribed via: PrivyDoc Telemedicine Portal. Secure validation reference ID: PD-${con.id.toUpperCase()}`, 18, stampY + 16);
-      doc.text("Authorization status: ACTIVE / APPROVED FOR DISPENSARY RELEASE", 18, stampY + 20);
-
-      // Circular Seal graphics
-      doc.setDrawColor(212, 175, 55);
-      doc.setLineWidth(0.6);
-      doc.circle(174, stampY + 16, 11);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.5);
-      doc.text("PRIVYDOC", 167, stampY + 14);
-      doc.text("APPROVED", 167, stampY + 16.5);
-      doc.text("CLINIC SEAL", 165.5, stampY + 19);
-
-      // Save PDF on trigger
-      doc.save(`PrivyDoc-Prescription-${con.id}.pdf`);
+      await generateConsultationPDF(con);
     } catch (e) {
       console.error("Failed to generate PDF:", e);
       alert("Unable to compile report PDF in browser environment. Please review clinical notes inside the portal tab.");
@@ -366,6 +256,25 @@ export default function PatientPortal({
             {/* VIEW A: PATIENT MAIN DASHBOARD */}
             {activeSidebarTab === "dashboard" && (
               <div className="space-y-6 animate-fade-in">
+                {/* Cardiovascular Safety Alert Banner */}
+                {selectedCase.red_flag && (
+                  <div className="bg-rose-500/10 border-2 border-rose-500/20 p-6 rounded-2xl space-y-3 animate-fade-in">
+                    <div className="flex items-center gap-2.5 text-rose-400 font-extrabold text-sm">
+                      <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0" />
+                      CARDIOVASCULAR SAFETY BLOCK
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Our clinical safety sweeps have flagged severe cardiovascular safety risks in your intake questionnaires. 
+                      Because of these high-risk contraindications, remote online prescription authorization has been blocked to protect your health.
+                    </p>
+                    <div className="pt-1.5 border-t border-rose-500/10">
+                      <p className="text-[11px] text-[#E5C158] font-bold font-mono uppercase tracking-wider">
+                        🚨 RECOMMENDED: Please visit a local clinic or physical hospital for an in-person diagnostic workup.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Greeting Banner */}
                 <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-black rounded-2xl border border-zinc-900 p-6 relative overflow-hidden">
                   <div className="absolute inset-y-0 right-0 w-32 bg-[radial-gradient(circle_at_100%_50%,rgba(212,175,55,0.06),transparent)] pointer-events-none" />
@@ -385,23 +294,26 @@ export default function PatientPortal({
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                        selectedCase.status === "completed" 
-                          ? "bg-emerald-500/15 text-emerald-400" 
-                          : selectedCase.status === "active" 
-                            ? "bg-amber-500/15 text-amber-400 animate-pulse" 
-                            : "bg-blue-500/15 text-blue-400"
+                        selectedCase.red_flag
+                          ? "bg-rose-500/15 text-rose-400"
+                          : selectedCase.status === "completed" 
+                            ? "bg-emerald-500/15 text-emerald-400" 
+                            : selectedCase.status === "active" 
+                              ? "bg-amber-500/15 text-amber-400 animate-pulse" 
+                              : "bg-blue-500/15 text-blue-400"
                       }`}>
-                        {selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
+                        {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
                       </span>
                       <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
                       <p className="text-xs text-zinc-400 mt-1">Consultation ID: {selectedCase.id} • Registered {formatDate(selectedCase.created_at)}</p>
                     </div>
 
                     <button 
-                      onClick={() => setActiveSidebarTab("messages")}
-                      className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-bold text-xs rounded-xl transition-all"
+                      onClick={() => !selectedCase.red_flag && setActiveSidebarTab("messages")}
+                      disabled={selectedCase.red_flag}
+                      className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-bold text-xs rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Consult Doctor
+                      {selectedCase.red_flag ? "Safety Blocked" : "Consult Doctor"}
                     </button>
                   </div>
 
@@ -513,86 +425,101 @@ export default function PatientPortal({
             {/* VIEW C: LIVE CHAT WINDOW */}
             {activeSidebarTab === "messages" && (
               <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[520px] overflow-hidden shadow-xl animate-fade-in">
-                {/* Chat Header */}
-                <div className="px-5 py-4 border-b border-zinc-900 bg-zinc-900/10 flex justify-between items-center">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Confidential Medical Desk Chat</h4>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">
-                        {selectedCase.doctor_name ? `Active Consultation with ${selectedCase.doctor_name}` : "Clinician pending pickup..."}
-                      </p>
-                    </div>
-                  </div>
-                  <HelpCircle className="w-4 h-4 text-zinc-600" />
-                </div>
-
-                {/* Messages Body */}
-                <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-black/30 text-xs">
-                  {selectedCase.messages.length === 0 ? (
-                    <div className="text-center py-16 space-y-2">
-                      <MessageSquare className="w-10 h-10 text-zinc-800 mx-auto" />
-                      <p className="font-bold text-zinc-500">Secure Consultation Active</p>
-                      <p className="text-[11px] text-zinc-600 max-w-sm mx-auto leading-relaxed">
-                        Your medical details are secure. Type below if you would like to provide additional symptoms or lifestyle queries for your reviewing physician.
-                      </p>
-                    </div>
-                  ) : (
-                    selectedCase.messages.map((msg) => {
-                      if (msg.sender === "system") {
-                        return (
-                          <div key={msg.id} className="text-center py-1">
-                            <span className="inline-block px-2.5 py-0.5 bg-zinc-900 text-[9px] text-zinc-500 rounded-full">
-                              {msg.text}
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      const isPatient = msg.sender === "patient";
-                      return (
-                        <div key={msg.id} className={`flex ${isPatient ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[280px] rounded-2xl p-3.5 space-y-1 ${
-                            isPatient 
-                              ? "bg-[#d4af37] text-black font-semibold rounded-tr-none" 
-                              : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-none"
-                          }`}>
-                            <span className="text-[8.5px] block opacity-75 uppercase font-mono tracking-wider font-extrabold">
-                              {msg.sender_name}
-                            </span>
-                            <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                            <span className="text-[7.5px] block text-right opacity-60">
-                              {formatDate(msg.timestamp).split(",")[1]?.trim() || "Just now"}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Messages Input Box */}
-                {selectedCase.status !== "completed" ? (
-                  <div className="p-3 bg-zinc-900/10 border-t border-zinc-900 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type confidential message to medical specialist..."
-                      value={patientMessage}
-                      onChange={(e) => setPatientMessage(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && onSendPatientMessage()}
-                      className="flex-1 bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
-                    />
-                    <button
-                      onClick={onSendPatientMessage}
-                      className="p-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl transition-all"
-                    >
-                      <Send className="w-4 h-4 text-black" />
-                    </button>
+                {selectedCase.red_flag ? (
+                  <div className="flex-1 flex flex-col justify-center items-center text-center p-8 space-y-4 bg-rose-500/[0.02]">
+                    <ShieldAlert className="w-12 h-12 text-rose-500 animate-pulse" />
+                    <h4 className="font-extrabold text-white text-base" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Secure Chat Disabled</h4>
+                    <p className="text-xs text-zinc-400 max-w-sm leading-relaxed">
+                      This case has been flagged with severe cardiovascular safety risks. Access to doctor consultation chat is restricted for your clinical protection.
+                    </p>
+                    <span className="text-[10px] text-rose-400 font-mono tracking-wider font-bold uppercase bg-rose-500/10 px-3 py-1 rounded-full">
+                      Safety Block Active
+                    </span>
                   </div>
                 ) : (
-                  <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic">
-                    Consultation file closed. Digital prescription has been issued in the reports tab.
-                  </div>
+                  <>
+                    {/* Chat Header */}
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-zinc-900/10 flex justify-between items-center">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
+                        <div>
+                          <h4 className="text-xs font-bold text-white">Confidential Medical Desk Chat</h4>
+                          <p className="text-[10px] text-zinc-500 mt-0.5">
+                            {selectedCase.doctor_name ? `Active Consultation with ${selectedCase.doctor_name}` : "Clinician pending pickup..."}
+                          </p>
+                        </div>
+                      </div>
+                      <HelpCircle className="w-4 h-4 text-zinc-600" />
+                    </div>
+
+                    {/* Messages Body */}
+                    <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-black/30 text-xs">
+                      {selectedCase.messages.length === 0 ? (
+                        <div className="text-center py-16 space-y-2">
+                          <MessageSquare className="w-10 h-10 text-zinc-800 mx-auto" />
+                          <p className="font-bold text-zinc-500">Secure Consultation Active</p>
+                          <p className="text-[11px] text-zinc-600 max-w-sm mx-auto leading-relaxed">
+                            Your medical details are secure. Type below if you would like to provide additional symptoms or lifestyle queries for your reviewing physician.
+                          </p>
+                        </div>
+                      ) : (
+                        selectedCase.messages.map((msg) => {
+                          if (msg.sender === "system") {
+                            return (
+                              <div key={msg.id} className="text-center py-1">
+                                <span className="inline-block px-2.5 py-0.5 bg-zinc-900 text-[9px] text-zinc-500 rounded-full">
+                                  {msg.text}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          const isPatient = msg.sender === "patient";
+                          return (
+                            <div key={msg.id} className={`flex ${isPatient ? "justify-end" : "justify-start"}`}>
+                              <div className={`max-w-[280px] rounded-2xl p-3.5 space-y-1 ${
+                                isPatient 
+                                  ? "bg-[#d4af37] text-black font-semibold rounded-tr-none" 
+                                  : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-none"
+                              }`}>
+                                <span className="text-[8.5px] block opacity-75 uppercase font-mono tracking-wider font-extrabold">
+                                  {msg.sender_name}
+                                </span>
+                                <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                <span className="text-[7.5px] block text-right opacity-60">
+                                  {formatDate(msg.timestamp).split(",")[1]?.trim() || "Just now"}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Messages Input Box */}
+                    {selectedCase.status !== "completed" ? (
+                      <div className="p-3 bg-zinc-900/10 border-t border-zinc-900 flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Type confidential message to medical specialist..."
+                          value={patientMessage}
+                          onChange={(e) => setPatientMessage(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && onSendPatientMessage()}
+                          className="flex-1 bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                        <button
+                          onClick={onSendPatientMessage}
+                          className="p-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl transition-all"
+                        >
+                          <Send className="w-4 h-4 text-black" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic">
+                        Consultation file closed. Digital prescription has been issued in the reports tab.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -617,7 +544,15 @@ export default function PatientPortal({
                 </div>
 
                 {/* Prescription sheet and official PDF card (if case closed) */}
-                {selectedCase.status === "completed" ? (
+                {selectedCase.red_flag ? (
+                  <div className="p-8 bg-rose-500/5 border border-rose-500/15 rounded-2xl text-center space-y-3.5 animate-fade-in">
+                    <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto animate-pulse" />
+                    <h5 className="font-extrabold text-rose-400 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Online Prescription Locked</h5>
+                    <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
+                      Due to cardiovascular safety contraindications detected during clinical safety reviews, remote prescription issuance is strictly locked. Please visit a cardiologist or general hospital for physical assessment.
+                    </p>
+                  </div>
+                ) : selectedCase.status === "completed" ? (
                   <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full filter blur-xl" />
                     
@@ -652,6 +587,129 @@ export default function PatientPortal({
                         </div>
                       </div>
                     </div>
+
+                    {/* Raise Dispute Box */}
+                    <div className="mt-6 pt-6 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-red-950/[0.02] p-4 rounded-xl border border-zinc-900/60">
+                      <div>
+                        <h5 className="font-bold text-zinc-300 text-xs">Dissatisfied with this clinical consultation?</h5>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">You can escalate this case file to administrative medical supervisors for a clinical review.</p>
+                      </div>
+                      
+                      {disputeSubmitted ? (
+                        <span className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-wider bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/15">
+                          Dispute Lodged / Pending Review
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setDisputeReason("");
+                            setDisputeError("");
+                            setOpenDisputeForm(true);
+                          }}
+                          className="px-4 py-2 border border-zinc-900 hover:border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs rounded-xl transition-all"
+                        >
+                          File Formal Dispute
+                        </button>
+                      )}
+                    </div>
+
+                    {openDisputeForm && (
+                      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-fade-in text-left">
+                          <div>
+                            <h4 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                              <ShieldAlert className="w-4 h-4 text-rose-500" /> Escalate Consultation Dispute
+                            </h4>
+                            <p className="text-xs text-zinc-400 mt-1">
+                              Briefly detail your clinical concerns or grievance. Admin supervisors will audit your intake, doctor transcripts, and prescription.
+                            </p>
+                          </div>
+
+                          {disputeError && (
+                            <p className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-[10px] text-rose-400 font-mono">
+                              {disputeError}
+                            </p>
+                          )}
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Dispute Reason Category</label>
+                            <select
+                              value={disputeCategory}
+                              onChange={(e) => setDisputeCategory(e.target.value)}
+                              className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                            >
+                              <option value="Incorrect prescription advice / dose discrepancy">Incorrect prescription advice / dose discrepancy</option>
+                              <option value="Doctor failed to answer medical inquiries fully">Doctor failed to answer medical inquiries fully</option>
+                              <option value="Poor clinical bedside manner / communication">Poor clinical bedside manner / communication</option>
+                              <option value="Clinical safety check bypass or incorrect diagnosis">Clinical safety check bypass or incorrect diagnosis</option>
+                              <option value="Administrative issue or system error">Administrative issue or system error</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Detailed Explanation (Mandatory)</label>
+                            <textarea
+                              required
+                              placeholder="Describe your grievance in detail..."
+                              value={disputeReason}
+                              onChange={(e) => setDisputeReason(e.target.value)}
+                              rows={4}
+                              className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/40">
+                            <button
+                              type="button"
+                              onClick={() => { setOpenDisputeForm(false); setDisputeError(""); }}
+                              className="px-3.5 py-1.5 border border-zinc-900 hover:border-zinc-850 text-zinc-400 hover:text-white rounded-lg text-xs font-bold transition-all"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!disputeReason.trim() || submittingDispute}
+                              onClick={async () => {
+                                setSubmittingDispute(true);
+                                setDisputeError("");
+                                try {
+                                  const response = await fetch("/api/data/disputes", {
+                                    method: "POST",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      "x-patient-phone": selectedCase.patient_phone || ""
+                                    },
+                                    body: JSON.stringify({
+                                      id: "disp_" + Math.random().toString(36).substr(2, 9),
+                                      consultation_id: selectedCase.id,
+                                      patient_phone: selectedCase.patient_phone,
+                                      reason: `${disputeCategory}: ${disputeReason}`,
+                                      status: "pending",
+                                      created_at: new Date().toISOString()
+                                    })
+                                  });
+                                  const resData = await response.json();
+                                  if (!response.ok) {
+                                    setDisputeError(resData.message || "Failed to lodge dispute. Please try again.");
+                                  } else {
+                                    setDisputeSubmitted(true);
+                                    setOpenDisputeForm(false);
+                                    alert("Dispute lodged successfully. Admin supervisors will audit your file.");
+                                  }
+                                } catch (err) {
+                                  setDisputeError("Failed to communicate with secure servers.");
+                                } finally {
+                                  setSubmittingDispute(false);
+                                }
+                              }}
+                              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-extrabold rounded-lg text-xs transition-all animate-pulse"
+                            >
+                              {submittingDispute ? "Submitting..." : "Escalate Now"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-8 bg-zinc-950 rounded-2xl border border-dashed border-zinc-900 text-center space-y-2">

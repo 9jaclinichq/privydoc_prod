@@ -17,8 +17,8 @@ interface IntakeFormProps {
   setPatientPhone: (phone: string) => void;
   intakeAnswers: Record<string, string>;
   setIntakeAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  checkoutStep: "form" | "payment" | "success";
-  setCheckoutStep: (step: "form" | "payment" | "success") => void;
+  checkoutStep: "form" | "payment" | "success" | "red_flag";
+  setCheckoutStep: (step: "form" | "payment" | "success" | "red_flag") => void;
   paymentMethod: "card" | "bank";
   setPaymentMethod: (method: "card" | "bank") => void;
   isSubmittingIntake: boolean;
@@ -57,6 +57,16 @@ export default function IntakeForm({
       alert("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
       return;
     }
+
+    // Cardiovascular Safety Exception (Red Flag detection)
+    const hasChestPain = intakeAnswers["chest_pain"] && intakeAnswers["chest_pain"].startsWith("Yes");
+    const hasHeartDisease = intakeAnswers["comorbidities"] && intakeAnswers["comorbidities"].includes("Heart Disease / Angina");
+
+    if (hasChestPain || hasHeartDisease) {
+      setCheckoutStep("red_flag");
+      return;
+    }
+
     setCheckoutStep("payment");
   };
 
@@ -367,6 +377,40 @@ export default function IntakeForm({
               Modify case evaluation answers
             </button>
           </div>
+        </div>
+      )}
+
+      {/* STEP 3: Red Flag Exclusion Screen */}
+      {checkoutStep === "red_flag" && (
+        <div className="space-y-6 text-center animate-fade-in py-4">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-8 h-8 animate-bounce" />
+          </div>
+          <div className="space-y-2.5">
+            <h4 className="text-xl font-bold text-red-500" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              Cardiovascular Safety Exception
+            </h4>
+            <p className="text-xs text-zinc-400 leading-relaxed max-w-md mx-auto">
+              Based on your clinical intake responses, you have indicated cardiovascular symptoms or conditions (such as active chest pain or heart disease) that present strict contraindications for standard telemedicine ED/PE therapies.
+            </p>
+            <p className="text-xs text-red-400/80 leading-relaxed font-semibold max-w-md mx-auto">
+              Online remote prescription under these conditions is highly unsafe and poses severe health risks.
+            </p>
+          </div>
+
+          <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-left space-y-2 max-w-md mx-auto">
+            <span className="text-[10px] font-mono uppercase text-red-500 font-bold block">🚨 ACTION REQUIRED</span>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Please seek immediate, in-person medical evaluation at an emergency clinic or hospital, or consult a licensed cardiologist. This medical intake program has been securely blocked for your safety.
+            </p>
+          </div>
+
+          <button
+            onClick={onCancel}
+            className="px-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl transition-all duration-200"
+          >
+            Return to Wellness Programs
+          </button>
         </div>
       )}
     </div>

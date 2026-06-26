@@ -107,27 +107,28 @@ Deno.serve(async (req) => {
 
 The patient has requested a General Health Check-Up. Generate a complete physician draft response that the doctor will review, personalise, and sign off before sending.
 
-RESPONSE FORMAT — Include only clinically relevant sections, in this order:
+RESPONSE FORMAT — Include only clinically relevant sections, in this exact order:
 
-1. ASSESSMENT — Overall health picture. Lead with the most important finding. State working impressions clearly. Avoid unwarranted certainty.
-2. KEY FINDINGS — Bullet-point summary of intake findings that drive the assessment. Reference specific patient answers (age, family history, lifestyle, screening gaps).
-3. IMMEDIATE ACTIONS — What the patient must do now. Priority investigations, urgent lifestyle changes, medications if indicated. Format prominently.
-4. INVESTIGATIONS — Full recommended list with one-line rationale per test. Format using separator lines. Tier by priority. Reference patient's stated budget preference.
-5. LIFESTYLE ADVICE — Specific, individualised recommendations based on this patient's intake. No generic lists.
-6. FOLLOW-UP PLAN — ✓ today, □ Day 2, □ Day 5.
-7. DETAILED EXPLANATION — Full clinical reasoning. Why these findings matter for this specific patient. Conditions considered.
-8. PATIENT EDUCATION — Relevant health information for this patient's age, risk profile, and presenting concerns.
-9. ADDITIONAL CONTEXT — Nigerian lab/pharmacy context, cost tiers, red flags, emergency advice. Include only when clinically indicated.
+1. Clinical Assessment — Overall health picture. Lead with the most important finding. State working impressions clearly. Avoid unwarranted certainty.
+2. Why I Think This — Bullet-point summary of intake findings that drive the assessment. Reference specific patient answers (age, family history, lifestyle, screening gaps).
+3. Personalised Action Plan — What the patient must do now. Priority investigations, urgent lifestyle changes, medications if indicated. Format prominently.
+4. Follow-up Plan (MANDATORY) — Exactly what happens next: ✓ today, □ Day 2, □ Day 5.
 
-RULE: Sections 1–6 must always appear first and be actionable on their own.
+OPTIONAL supplementary sections (include only when clinically relevant, after the above mandatory sections):
+- Conditions Considered — Other possibilities thought about and why.
+- Investigations & Rationale — Requested tests with one-line rationale per test. Format as: [test] — [one-sentence rationale].
+- Red Flags / Emergency Advice — Red flags, safety advice, and when to seek in-person emergency care.
+- What I Will Be Monitoring — What clinical parameters will be watched in follow-ups.
 
-INVESTIGATION FORMAT:
+RULE: Clinical Assessment, Why I Think This, Personalised Action Plan, and Follow-up Plan must always appear first and be actionable on their own.
+
+INVESTIGATION FORMAT (under Investigations & Rationale if present):
 ──────────────────────────────
 INVESTIGATIONS RECOMMENDED
 [Test name] — [One sentence why]
 ──────────────────────────────
 
-MEDICATION FORMAT (if prescribing):
+MEDICATION FORMAT (under Personalised Action Plan if prescribing):
 ──────────────────────────────
 MEDICATION PRESCRIBED
 [Drug name (Brand)] [Dose]
@@ -159,7 +160,7 @@ ${intakeFormatted || "No intake data provided."}
 
 ${draft_response ? `DOCTOR'S PARTIAL DRAFT (incorporate if useful):\n${draft_response}` : "No draft started yet."}
 
-Generate the structured physician draft now. Follow the section order exactly: Assessment → Key Findings → Immediate Actions → Investigations → Lifestyle Advice → Follow-Up Plan → Detailed Explanation → Patient Education → Additional Context. Use [EDIT: ...] placeholders where the doctor needs to personalise. Actionable sections first.`;
+Generate the structured physician draft now. Follow the section order exactly: Clinical Assessment → Why I Think This → Personalised Action Plan → Follow-up Plan. Use [EDIT: ...] placeholders where the doctor needs to personalise. Actionable sections first.`;
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -199,20 +200,21 @@ Your task is to generate a complete physician draft response that the doctor wil
 RESPONSE FORMAT:
 Generate an adaptive structured response using the sections below. Include ONLY sections that are clinically relevant. Do NOT include all sections every time.
 
-SECTION ORDER — always follow this sequence (omit sections not clinically relevant):
-1. ASSESSMENT — Working diagnosis in plain language. Lead with the most actionable conclusion. Avoid presenting uncertain diagnoses as facts.
-2. KEY FINDINGS — Bullet-point summary of the clinical findings from the intake that drive your assessment. Reference specific patient answers.
-3. IMMEDIATE ACTIONS — What the patient must do now. Medications, urgent tests, lifestyle changes that cannot wait. Format prominently.
-4. INVESTIGATIONS — Tests requested, with one-line rationale per test. Format using separator lines.
-5. LIFESTYLE ADVICE — Specific, individualised recommendations. No generic wellness lists.
-6. FOLLOW-UP PLAN — Exactly what happens next: ✓ today, □ Day 2, □ Day 5.
-7. DETAILED EXPLANATION — Clinical reasoning in full. Why you think this, what you considered, what you ruled out. Make the patient feel "a doctor actually reviewed my case."
-8. PATIENT EDUCATION — Condition-specific information relevant to this patient's situation. Keep brief and specific.
-9. ADDITIONAL CONTEXT — Nigerian pharmacy/lab context, cost tiers, red flags, emergency advice. Include only when clinically indicated.
+SECTION ORDER — always follow this exact sequence (omit optional sections if not clinically relevant):
+1. Clinical Assessment — Working diagnosis in plain language. Lead with the most actionable conclusion. Avoid presenting uncertain diagnoses as facts.
+2. Why I Think This — Bullet-point summary of the clinical findings from the intake that drive your assessment. Reference specific patient answers.
+3. Personalised Action Plan — What the patient must do now. Medications, urgent lifestyle changes that cannot wait. Format prominently.
+4. Follow-up Plan (MANDATORY) — Exactly what happens next: ✓ today, □ Day 2, □ Day 5.
 
-RULE: Sections 1–6 must always appear first and be actionable on their own. A patient who reads only the first 6 sections should have everything they need to act.
+OPTIONAL supplementary sections (include only when clinically relevant, after the above mandatory sections):
+- Conditions Considered — Other possibilities thought about and why.
+- Investigations & Rationale — Requested tests with one-line rationale per test. Format as: [test] — [one-sentence rationale].
+- Red Flags / Emergency Advice — Red flags, safety advice, and when to seek in-person emergency care.
+- What I Will Be Monitoring — What clinical parameters will be watched in follow-ups.
 
-MEDICATION FORMAT (when prescribing):
+RULE: The first 4 sections (Clinical Assessment, Why I Think This, Personalised Action Plan, Follow-up Plan) must always appear first and be actionable on their own.
+
+MEDICATION FORMAT (under Personalised Action Plan if prescribing):
 ──────────────────────────────
 MEDICATION PRESCRIBED
 [Drug name (Brand name)] [Dose]
@@ -220,7 +222,7 @@ MEDICATION PRESCRIBED
 [Key safety information / contraindications]
 ──────────────────────────────
 
-INVESTIGATION FORMAT (when requesting tests):
+INVESTIGATION FORMAT (under Investigations & Rationale if present):
 ──────────────────────────────
 [Test name] — [One sentence why this test is being requested]
 ──────────────────────────────
@@ -251,7 +253,7 @@ ${intakeFormatted || "No intake data provided."}
 
 ${draft_response ? `DOCTOR'S PARTIAL DRAFT (incorporate if useful):\n${draft_response}` : "No draft started yet."}
 
-Generate the structured physician draft response now. Follow the section order exactly: Assessment → Key Findings → Immediate Actions → Investigations → Lifestyle Advice → Follow-Up Plan → Detailed Explanation → Patient Education → Additional Context. Use [EDIT: ...] placeholders where the doctor needs to personalise. Actionable sections first — demonstrate physician reasoning, not volume.`;
+Generate the structured physician draft response now. Follow the section order exactly: Clinical Assessment → Why I Think This → Personalised Action Plan → Follow-up Plan. Use [EDIT: ...] placeholders where the doctor needs to personalise. Actionable sections first — demonstrate physician reasoning, not volume.`;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

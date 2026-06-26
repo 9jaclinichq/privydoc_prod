@@ -1,57 +1,25 @@
 import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest, PricingConfig } from "../types";
 import { DEMO_DOCTORS, DEMO_CONSULTATIONS } from "../data";
 import { generateId } from "../utils";
+import { getStageLabel } from "../lifecycle";
 
-// Supabase Configuration with default fallbacks matching your project
-const metaEnv = (import.meta as any).env || {};
-const SUPABASE_URL = metaEnv.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-const SUPABASE_KEY = metaEnv.VITE_SUPABASE_ANON_KEY || "sb_publishable_YPVd8f31duUa_DbmehW50g_XoV4D1Si";
+import { DATA } from "../services/data";
 
-const headers = {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json"
-};
-
-// Supabase API Helpers
+// Supabase API Helpers routed through Express Proxy
 async function supabaseFetch(table: string, query: string = ""): Promise<any> {
-  const url = `${SUPABASE_URL}/rest/v1/${table}${query}`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`Supabase fetch failed for ${table}: ${res.statusText}`);
-  return res.json();
+  return DATA.get(table, query);
 }
 
 async function supabaseInsert(table: string, body: any): Promise<any> {
-  const url = `${SUPABASE_URL}/rest/v1/${table}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { ...headers, Prefer: "return=representation" },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Supabase insert failed on ${table}: ${res.statusText}`);
-  return res.json();
+  return DATA.post(table, body);
 }
 
 async function supabaseUpdate(table: string, matchQuery: string, body: any): Promise<any> {
-  const url = `${SUPABASE_URL}/rest/v1/${table}?${matchQuery}`;
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: { ...headers, Prefer: "return=representation" },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Supabase update failed on ${table}: ${res.statusText}`);
-  return res.json();
+  return DATA.patch(table, matchQuery, body);
 }
 
 async function supabaseEdgeFunction(name: string, body: any): Promise<any> {
-  const url = `${SUPABASE_URL}/functions/v1/${name}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Edge Function ${name} failed`);
-  return res.json();
+  return DATA.fn(name, body);
 }
 
 // LocalStorage Keys
@@ -108,7 +76,16 @@ const mapDoctorToSupabase = (d: Doctor) => ({
   verified: d.verified,
   bank_name: d.bank_name || null,
   bank_account: d.account_number || null,
-  payout_balance: d.payout_balance
+  payout_balance: d.payout_balance,
+  flagged: d.flagged || false,
+  flag_reason: d.flag_reason || null,
+  flagged_at: d.flagged_at || null,
+  earnings_new: d.earnings_new || 0,
+  earnings_review: d.earnings_review || 0,
+  total_new: d.total_new || 0,
+  total_review: d.total_review || 0,
+  unpaid_new: d.unpaid_new || 0,
+  unpaid_review: d.unpaid_review || 0
 });
 
 const mapDoctorFromSupabase = (s: any): Doctor => ({
@@ -122,7 +99,16 @@ const mapDoctorFromSupabase = (s: any): Doctor => ({
   verified: !!s.verified,
   bank_name: s.bank_name || "",
   account_number: s.bank_account || s.account_number || "",
-  payout_balance: parseFloat(s.payout_balance) || 0
+  payout_balance: parseFloat(s.payout_balance) || 0,
+  flagged: !!s.flagged,
+  flag_reason: s.flag_reason || "",
+  flagged_at: s.flagged_at || undefined,
+  earnings_new: parseFloat(s.earnings_new) || 0,
+  earnings_review: parseFloat(s.earnings_review) || 0,
+  total_new: parseInt(s.total_new) || 0,
+  total_review: parseInt(s.total_review) || 0,
+  unpaid_new: parseFloat(s.unpaid_new) || 0,
+  unpaid_review: parseFloat(s.unpaid_review) || 0
 });
 
 const mapConsultationToSupabase = (c: Consultation) => ({
@@ -146,7 +132,20 @@ const mapConsultationToSupabase = (c: Consultation) => ({
     duration: c.duration,
     answers: c.raw_answers,
     symptoms: c.symptoms
-  }
+  },
+  thread_id: c.thread_id || null,
+  stage: c.stage || "initial",
+  form_answers: c.form_answers || null,
+  red_flag: c.red_flag || false,
+  red_flag_source: c.red_flag_source || null,
+  is_review: c.is_review || false,
+  locked_at: c.locked_at || null,
+  responded_at: c.responded_at || null,
+  day2_response_at: c.day2_response_at || null,
+  day5_closed_at: c.day5_closed_at || null,
+  patient_rating: c.patient_rating || null,
+  referral_text: c.referral_text || null,
+  notes: c.notes || null
 });
 
 const mapConsultationFromSupabase = (s: any): Consultation => ({
@@ -168,7 +167,20 @@ const mapConsultationFromSupabase = (s: any): Consultation => ({
   amount_paid: parseFloat(s.amount_paid) || 0,
   created_at: s.created_at || new Date().toISOString(),
   updated_at: s.updated_at || new Date().toISOString(),
-  messages: Array.isArray(s.messages) ? s.messages : []
+  messages: Array.isArray(s.messages) ? s.messages : [],
+  thread_id: s.thread_id || undefined,
+  stage: s.stage || "initial",
+  form_answers: s.form_answers || undefined,
+  red_flag: s.red_flag !== undefined ? s.red_flag : undefined,
+  red_flag_source: s.red_flag_source || undefined,
+  is_review: s.is_review !== undefined ? s.is_review : undefined,
+  locked_at: s.locked_at || undefined,
+  responded_at: s.responded_at || undefined,
+  day2_response_at: s.day2_response_at || undefined,
+  day5_closed_at: s.day5_closed_at || undefined,
+  patient_rating: s.patient_rating || undefined,
+  referral_text: s.referral_text || undefined,
+  notes: s.notes || undefined
 });
 
 const mapPayoutToSupabase = (p: PayoutRequest) => ({
@@ -295,16 +307,39 @@ export const doctorApi = {
     return { success: true, doctor: newDoc };
   },
 
-  login: (mdcn_folio: string, pin: string): { success: boolean; error?: string; doctor?: Doctor } => {
-    const doctors = doctorApi.getAll();
-    const doc = doctors.find(d => d.mdcn_folio === mdcn_folio && d.pin_hash === pin);
-    if (!doc) {
-      return { success: false, error: "Invalid MDCN Folio Number or PIN." };
+  login: async (mdcn_folio: string, pin: string): Promise<{ success: boolean; error?: string; doctor?: Doctor }> => {
+    try {
+      const res = await fetch("/api/auth/clinician/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mdcn_folio, pin })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const doctors = doctorApi.getAll();
+        const index = doctors.findIndex(d => d.id === data.doctor.id);
+        if (index !== -1) {
+          doctors[index] = { ...doctors[index], ...data.doctor };
+        } else {
+          doctors.push(data.doctor);
+        }
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+        return { success: true, doctor: data.doctor };
+      } else {
+        return { success: false, error: data.message || "Login failed." };
+      }
+    } catch (e) {
+      console.error("Doctor API login fetch failed, falling back:", e);
+      const doctors = doctorApi.getAll();
+      const doc = doctors.find(d => d.mdcn_folio === mdcn_folio && d.pin_hash === pin);
+      if (!doc) {
+        return { success: false, error: "Invalid MDCN Folio Number or PIN." };
+      }
+      if (doc.status === "suspended") {
+        return { success: false, error: "Your clinician account is suspended. Please contact Admin." };
+      }
+      return { success: true, doctor: doc };
     }
-    if (doc.status === "suspended") {
-      return { success: false, error: "Your clinician account is suspended. Please contact Admin." };
-    }
-    return { success: true, doctor: doc };
   },
 
   updatePayoutDetails: (id: string, bankName: string, accountNumber: string): { success: boolean } => {
@@ -414,7 +449,13 @@ export const consultationApi = {
     const consultations = consultationApi.getAll();
     const index = consultations.findIndex(c => c.id === id);
     if (index !== -1 && consultations[index].status === "pending") {
+      const lockedAt = new Date().toISOString();
+      const threadId = consultations[index].thread_id || "thread_" + id;
+
       consultations[index].status = "active";
+      consultations[index].stage = "initial";
+      consultations[index].locked_at = lockedAt;
+      consultations[index].thread_id = threadId;
       consultations[index].doctor_id = docId;
       consultations[index].doctor_name = docName;
       consultations[index].updated_at = new Date().toISOString();
@@ -433,12 +474,40 @@ export const consultationApi = {
       // Replicate live to Supabase
       supabasePatch("consultations", id, {
         status: "active",
+        stage: "initial",
+        locked_at: lockedAt,
+        thread_id: threadId,
         doctor_id: docId,
         doctor_name: docName,
         messages: consultations[index].messages,
         updated_at: consultations[index].updated_at
       }).catch(e => {
         console.error("Live case claim replicate failed:", e);
+      });
+
+      // Ensure thread exists in database
+      supabaseInsert("threads", {
+        id: threadId,
+        patient_phone: consultations[index].patient_phone,
+        condition: consultations[index].condition,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).catch(e => {
+        // may already exist, swallow
+      });
+
+      // Persist accepting system message to messages table
+      supabaseInsert("messages", {
+        id: systemMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "system",
+        sender_name: "System",
+        text: systemMsg.text,
+        timestamp: systemMsg.timestamp,
+        stage_label: "initial"
+      }).catch(e => {
+        console.error("Could not write system accept message to database:", e);
       });
 
       return { success: true, consultation: consultations[index] };
@@ -450,6 +519,9 @@ export const consultationApi = {
     const consultations = consultationApi.getAll();
     const index = consultations.findIndex(c => c.id === id);
     if (index !== -1) {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      consultations[index].thread_id = threadId;
+
       const newMsg: ChatMessage = {
         id: generateId("msg"),
         sender,
@@ -459,14 +531,56 @@ export const consultationApi = {
       };
       consultations[index].messages.push(newMsg);
       consultations[index].updated_at = new Date().toISOString();
+
+      // Clinical Lifecycle state transition
+      // First doctor response: move stage from initial to day2_pending
+      if (sender === "doctor" && (consultations[index].stage === "initial" || !consultations[index].stage)) {
+        consultations[index].stage = "day2_pending";
+        consultations[index].responded_at = new Date().toISOString();
+      }
+
       localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
 
-      // Replicate live to Supabase
+      const currentStage = consultations[index].stage || "initial";
+      const stageLabel = getStageLabel(currentStage as any);
+
+      // Replicate live to Supabase consultations
       supabasePatch("consultations", id, {
         messages: consultations[index].messages,
+        stage: consultations[index].stage || "initial",
+        thread_id: threadId,
+        responded_at: consultations[index].responded_at || null,
         updated_at: consultations[index].updated_at
       }).catch(e => {
         console.error("Live message replicate failed:", e);
+      });
+
+      // Persist message to messages table
+      supabaseInsert("messages", {
+        id: newMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender,
+        sender_name: senderName,
+        text,
+        timestamp: newMsg.timestamp,
+        stage_label: stageLabel
+      }).catch(e => {
+        console.error("Could not persist message to messages table:", e);
+      });
+
+      // Create audit log row for response_sent
+      supabaseInsert("audit_log", {
+        id: "aud_resp_" + Math.random().toString(36).substr(2, 9),
+        action: "response_sent",
+        actor_type: sender,
+        actor_id: sender === "doctor" ? "doctor_clearance" : "patient_phone",
+        target_type: "consultation",
+        target_id: id,
+        detail: `${senderName} (${sender}) sent chat response: "${text.substring(0, 100)}${text.length > 100 ? "..." : ""}"`,
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not persist response_sent audit log:", e);
       });
 
       return { success: true, message: newMsg };
@@ -478,7 +592,12 @@ export const consultationApi = {
     const consultations = consultationApi.getAll();
     const index = consultations.findIndex(c => c.id === id);
     if (index !== -1 && consultations[index].status === "active") {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      const closedAt = new Date().toISOString();
+
       consultations[index].status = "completed";
+      consultations[index].stage = "day5_closed";
+      consultations[index].day5_closed_at = closedAt;
       consultations[index].doctor_notes = notes;
       consultations[index].prescription = prescription;
       consultations[index].updated_at = new Date().toISOString();
@@ -499,11 +618,32 @@ export const consultationApi = {
       if (docIndex !== -1) {
         const share = Math.round(consultations[index].amount_paid * 0.7);
         doctors[docIndex].payout_balance += share;
+        doctors[docIndex].earnings_new = (doctors[docIndex].earnings_new || 0) + share;
+        doctors[docIndex].unpaid_new = (doctors[docIndex].unpaid_new || 0) + share;
+        doctors[docIndex].total_new = (doctors[docIndex].total_new || 0) + 1;
         localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
 
         // Replicate doctor balance live to Supabase
-        supabasePatch("doctors", docId!, { payout_balance: doctors[docIndex].payout_balance }).catch(e => {
+        supabasePatch("doctors", docId!, { 
+          payout_balance: doctors[docIndex].payout_balance,
+          earnings_new: doctors[docIndex].earnings_new,
+          unpaid_new: doctors[docIndex].unpaid_new,
+          total_new: doctors[docIndex].total_new
+        }).catch(e => {
           console.error("Live doctor balance update replicate failed:", e);
+        });
+
+        // Insert payment credit for tracking doctor payout earnings
+        supabaseInsert("payment_credits", {
+          id: "cred_" + Math.random().toString(36).substr(2, 9),
+          doctor_id: docId,
+          consultation_id: id,
+          amount_earned: share,
+          payment_type: "new",
+          payout_status: "unpaid",
+          created_at: new Date().toISOString()
+        }).catch(e => {
+          console.error("Failed to log payment credit earnings:", e);
         });
       }
 
@@ -512,12 +652,318 @@ export const consultationApi = {
       // Replicate live to Supabase
       supabasePatch("consultations", id, {
         status: "completed",
+        stage: "day5_closed",
+        day5_closed_at: closedAt,
         doctor_notes: notes,
         prescription,
         messages: consultations[index].messages,
         updated_at: consultations[index].updated_at
       }).catch(e => {
         console.error("Live completion replicate failed:", e);
+      });
+
+      // Persist system close message to messages table
+      supabaseInsert("messages", {
+        id: systemMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "system",
+        sender_name: "System",
+        text: systemMsg.text,
+        timestamp: systemMsg.timestamp,
+        stage_label: "day5"
+      }).catch(e => {
+        console.error("Could not write system complete message to messages table:", e);
+      });
+
+      return { success: true, consultation: consultations[index] };
+    }
+    return { success: false };
+  },
+
+  sendDay2Checkin: (id: string, messageText: string, docName: string): { success: boolean; message?: ChatMessage } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === id);
+    if (index !== -1) {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      const responseTime = new Date().toISOString();
+
+      consultations[index].stage = "day2_sent";
+      consultations[index].day2_response_at = responseTime;
+      consultations[index].updated_at = new Date().toISOString();
+
+      const newMsg: ChatMessage = {
+        id: generateId("msg"),
+        sender: "doctor",
+        sender_name: docName,
+        text: messageText,
+        timestamp: responseTime
+      };
+      consultations[index].messages.push(newMsg);
+
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        stage: "day2_sent",
+        day2_response_at: responseTime,
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live Day-2 check-in replicate failed:", e);
+      });
+
+      // Persist to messages table
+      supabaseInsert("messages", {
+        id: newMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "doctor",
+        sender_name: docName,
+        text: messageText,
+        timestamp: responseTime,
+        stage_label: "day2"
+      }).catch(e => {
+        console.error("Could not write Day-2 check-in message to messages table:", e);
+      });
+
+      return { success: true, message: newMsg };
+    }
+    return { success: false };
+  },
+
+  progressToDay5: (id: string): { success: boolean; systemMessage?: ChatMessage } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === id);
+    if (index !== -1) {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      const timestamp = new Date().toISOString();
+
+      consultations[index].stage = "day5_pending";
+      consultations[index].updated_at = timestamp;
+
+      const systemMsg: ChatMessage = {
+        id: generateId("msg"),
+        sender: "system",
+        sender_name: "System",
+        text: "Day-5 Evaluation is now active. Direct medical dialogue remains available for clinical closure assessment.",
+        timestamp
+      };
+      consultations[index].messages.push(systemMsg);
+
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        stage: "day5_pending",
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live progress to Day-5 replicate failed:", e);
+      });
+
+      // Persist system message to messages table
+      supabaseInsert("messages", {
+        id: systemMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "system",
+        sender_name: "System",
+        text: systemMsg.text,
+        timestamp,
+        stage_label: "day5"
+      }).catch(e => {
+        console.error("Could not write Day-5 system message to messages table:", e);
+      });
+
+      return { success: true, systemMessage: systemMsg };
+    }
+    return { success: false };
+  },
+
+  requestReview: (id: string, text: string, rating: number): { success: boolean; message?: ChatMessage } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === id);
+    if (index !== -1) {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      const timestamp = new Date().toISOString();
+
+      consultations[index].status = "active";
+      consultations[index].stage = "review_open";
+      consultations[index].is_review = true;
+      consultations[index].patient_rating = rating;
+      consultations[index].updated_at = timestamp;
+
+      const newMsg: ChatMessage = {
+        id: generateId("msg"),
+        sender: "patient",
+        sender_name: "Patient",
+        text: text,
+        timestamp
+      };
+      consultations[index].messages.push(newMsg);
+
+      const systemMsg: ChatMessage = {
+        id: generateId("msg"),
+        sender: "system",
+        sender_name: "System",
+        text: `Review requested with a ${rating}-star rating. Direct medical dialogue re-opened.`,
+        timestamp
+      };
+      consultations[index].messages.push(systemMsg);
+
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        status: "active",
+        stage: "review_open",
+        is_review: true,
+        patient_rating: rating,
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live request review replicate failed:", e);
+      });
+
+      // Persist message to messages table
+      supabaseInsert("messages", {
+        id: newMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "patient",
+        sender_name: "Patient",
+        text,
+        timestamp,
+        stage_label: "review"
+      }).catch(e => {
+        console.error("Could not write review request message to messages table:", e);
+      });
+
+      supabaseInsert("messages", {
+        id: systemMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "system",
+        sender_name: "System",
+        text: systemMsg.text,
+        timestamp,
+        stage_label: "review"
+      }).catch(e => {
+        console.error("Could not write system review request message to messages table:", e);
+      });
+
+      return { success: true, message: newMsg };
+    }
+    return { success: false };
+  },
+
+  resolveReview: (id: string, notes: string, prescription: string): { success: boolean; consultation?: Consultation } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === id);
+    if (index !== -1 && consultations[index].stage === "review_open") {
+      const threadId = consultations[index].thread_id || "thread_" + id;
+      const timestamp = new Date().toISOString();
+
+      consultations[index].status = "completed";
+      consultations[index].stage = "review_closed";
+      consultations[index].doctor_notes = notes;
+      consultations[index].prescription = prescription;
+      consultations[index].updated_at = timestamp;
+
+      const systemMsg: ChatMessage = {
+        id: generateId("msg"),
+        sender: "system",
+        sender_name: "System",
+        text: "Review resolved. Clinical assessment and updated prescription archived.",
+        timestamp
+      };
+      consultations[index].messages.push(systemMsg);
+
+      // Distribute review payout
+      const doctors = doctorApi.getAll();
+      const docId = consultations[index].doctor_id;
+      const docIndex = doctors.findIndex(d => d.id === docId);
+      if (docIndex !== -1) {
+        const share = Math.round((consultations[index].amount_paid || 3500) * 0.7);
+        doctors[docIndex].payout_balance += share;
+        doctors[docIndex].earnings_review = (doctors[docIndex].earnings_review || 0) + share;
+        doctors[docIndex].unpaid_review = (doctors[docIndex].unpaid_review || 0) + share;
+        doctors[docIndex].total_review = (doctors[docIndex].total_review || 0) + 1;
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+        // Replicate doctor stats live to Supabase
+        supabasePatch("doctors", docId!, { 
+          payout_balance: doctors[docIndex].payout_balance,
+          earnings_review: doctors[docIndex].earnings_review,
+          unpaid_review: doctors[docIndex].unpaid_review,
+          total_review: doctors[docIndex].total_review
+        }).catch(e => {
+          console.error("Live doctor review balance update replicate failed:", e);
+        });
+
+        // Insert payment credit for tracking doctor payout earnings
+        supabaseInsert("payment_credits", {
+          id: "cred_" + Math.random().toString(36).substr(2, 9),
+          doctor_id: docId,
+          consultation_id: id,
+          amount_earned: share,
+          payment_type: "review",
+          payout_status: "unpaid",
+          created_at: new Date().toISOString()
+        }).catch(e => {
+          console.error("Failed to log review payment credit earnings:", e);
+        });
+      }
+
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        status: "completed",
+        stage: "review_closed",
+        doctor_notes: notes,
+        prescription,
+        messages: consultations[index].messages,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live resolve review replicate failed:", e);
+      });
+
+      // Persist system resolve message to messages table
+      supabaseInsert("messages", {
+        id: systemMsg.id,
+        thread_id: threadId,
+        consultation_id: id,
+        sender: "system",
+        sender_name: "System",
+        text: systemMsg.text,
+        timestamp,
+        stage_label: "review"
+      }).catch(e => {
+        console.error("Could not write system resolve message to messages table:", e);
+      });
+
+      return { success: true, consultation: consultations[index] };
+    }
+    return { success: false };
+  },
+
+  updateReferral: (id: string, referralText: string): { success: boolean; consultation?: Consultation } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === id);
+    if (index !== -1) {
+      consultations[index].referral_text = referralText;
+      consultations[index].updated_at = new Date().toISOString();
+
+      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+      // Replicate live to Supabase
+      supabasePatch("consultations", id, {
+        referral_text: referralText,
+        updated_at: consultations[index].updated_at
+      }).catch(e => {
+        console.error("Live referral_text update replicate failed:", e);
       });
 
       return { success: true, consultation: consultations[index] };
@@ -606,6 +1052,40 @@ export const adminApi = {
     const index = payouts.findIndex(p => p.id === id);
     if (index !== -1 && payouts[index].status === "pending") {
       payouts[index].status = "approved";
+      
+      // Update unpaid balances
+      const doctors = doctorApi.getAll();
+      const docIndex = doctors.findIndex(d => d.id === payouts[index].doctor_id);
+      if (docIndex !== -1) {
+        let remainingDeduct = payouts[index].amount;
+        
+        // Deduct from unpaid_review first
+        const reviewUnpaid = doctors[docIndex].unpaid_review || 0;
+        if (reviewUnpaid >= remainingDeduct) {
+          doctors[docIndex].unpaid_review = reviewUnpaid - remainingDeduct;
+          remainingDeduct = 0;
+        } else {
+          doctors[docIndex].unpaid_review = 0;
+          remainingDeduct -= reviewUnpaid;
+        }
+
+        // Deduct remaining from unpaid_new
+        if (remainingDeduct > 0) {
+          const newUnpaid = doctors[docIndex].unpaid_new || 0;
+          doctors[docIndex].unpaid_new = Math.max(0, newUnpaid - remainingDeduct);
+        }
+
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+        // Replicate live to Supabase
+        supabasePatch("doctors", payouts[index].doctor_id, {
+          unpaid_new: doctors[docIndex].unpaid_new,
+          unpaid_review: doctors[docIndex].unpaid_review
+        }).catch(e => {
+          console.error("Live unpaid earnings deduct replicate failed:", e);
+        });
+      }
+
       localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(payouts));
 
       // Replicate update to Supabase
@@ -662,9 +1142,252 @@ export const adminApi = {
         console.error("Live clinician verification replicate failed:", e);
       });
 
+      // Insert audit log
+      supabaseInsert("audit_log", {
+        id: "aud_" + Math.random().toString(36).substr(2, 9),
+        action: approve ? "doctor_activated" : "doctor_suspended",
+        actor_type: "admin",
+        actor_id: "admin_clearance",
+        target_type: "doctor",
+        target_id: docId,
+        detail: approve ? "Approved and verified MDCN clinical license." : "Revoked verification. Status set to suspended.",
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not write audit log entry:", e);
+      });
+
+      // Insert notification
+      supabaseInsert("notifications", {
+        id: "not_" + Math.random().toString(36).substr(2, 9),
+        recipient_id: docId,
+        recipient_role: "doctor",
+        type: approve ? "payout" : "suspension",
+        title: approve ? "Clinical Account Verified" : "Verification Revoked",
+        message: approve 
+          ? "Congratulations! Your MDCN clinical license has been successfully verified. Your account is now active."
+          : "Your verified practicing credentials have been revoked. Please contact the Admin Office.",
+        is_read: false,
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not write notification log entry:", e);
+      });
+
       return { success: true };
     }
     return { success: false };
+  },
+
+  flagClinician: (docId: string, flagged: boolean, reason: string, status?: "active" | "suspended"): { success: boolean } => {
+    const doctors = doctorApi.getAll();
+    const index = doctors.findIndex(d => d.id === docId);
+    if (index !== -1) {
+      doctors[index].flagged = flagged;
+      doctors[index].flag_reason = flagged ? reason : "";
+      doctors[index].flagged_at = flagged ? new Date().toISOString() : undefined;
+      if (status) {
+        doctors[index].status = status;
+      }
+      localStorage.setItem(KEYS.DOCTORS, JSON.stringify(doctors));
+
+      // Replicate live to Supabase
+      supabasePatch("doctors", docId, {
+        flagged,
+        flag_reason: flagged ? reason : null,
+        flagged_at: flagged ? new Date().toISOString() : null,
+        status: status || doctors[index].status
+      }).catch(e => {
+        console.error("Live clinician flagging replicate failed:", e);
+      });
+
+      // Insert audit log
+      supabaseInsert("audit_log", {
+        id: "aud_" + Math.random().toString(36).substr(2, 9),
+        action: flagged ? "doctor_flagged" : "doctor_unflagged",
+        actor_type: "admin",
+        actor_id: "admin_clearance",
+        target_type: "doctor",
+        target_id: docId,
+        detail: flagged ? `Flagged: ${reason}. Status set to ${status || doctors[index].status}.` : "Flag removed.",
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not write audit log entry:", e);
+      });
+
+      // Insert notification
+      supabaseInsert("notifications", {
+        id: "not_" + Math.random().toString(36).substr(2, 9),
+        recipient_id: docId,
+        recipient_role: "doctor",
+        type: status === "suspended" ? "suspension" : "flag",
+        title: status === "suspended" ? "Clinical Credentials Suspended" : "Compliance Hold Flagged",
+        message: flagged
+          ? `Compliance Hold/Flag set on your clinician portfolio. Reason: ${reason}. Please update your credentials.`
+          : "Flag or compliance hold removed from your clinician portfolio.",
+        is_read: false,
+        created_at: new Date().toISOString()
+      }).catch(e => {
+        console.error("Could not write notification log entry:", e);
+      });
+
+      return { success: true };
+    }
+    return { success: false };
+  },
+
+  reassignCase: (consId: string, toDoctorId: string | null, reason: string): { success: boolean } => {
+    const consultations = consultationApi.getAll();
+    const index = consultations.findIndex(c => c.id === consId);
+    if (index === -1) return { success: false };
+
+    const cons = consultations[index];
+    const fromDoctorId = cons.doctor_id || null;
+    
+    // Find previous and new doctor names
+    const doctors = doctorApi.getAll();
+    const fromDoc = doctors.find(d => d.id === fromDoctorId);
+    const toDoc = toDoctorId ? doctors.find(d => d.id === toDoctorId) : null;
+
+    const fromDocName = fromDoc ? fromDoc.name : "unassigned";
+    const toDocName = toDoc ? toDoc.name : "pool (unassigned)";
+
+    // Update consultation locally
+    cons.doctor_id = toDoctorId || undefined;
+    cons.doctor_name = toDoc ? toDoc.name : undefined;
+    cons.locked_at = toDoctorId ? new Date().toISOString() : undefined;
+    
+    localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+
+    // Replicate live to Supabase
+    supabasePatch("consultations", consId, {
+      doctor_id: toDoctorId,
+      doctor_name: toDoc ? toDoc.name : null,
+      locked_at: toDoctorId ? new Date().toISOString() : null
+    }).catch(e => {
+      console.error("Live consultation reassignment replicate failed:", e);
+    });
+
+    // Create reassignment_log row in Supabase
+    const reassignLogId = "reas_" + Math.random().toString(36).substr(2, 9);
+    supabaseInsert("reassignment_log", {
+      id: reassignLogId,
+      consultation_id: consId,
+      from_doctor_id: fromDoctorId,
+      to_doctor_id: toDoctorId,
+      reason,
+      created_at: new Date().toISOString()
+    }).catch(e => {
+      console.error("Live reassignment log write failed:", e);
+    });
+
+    // Create audit_log row in Supabase
+    supabaseInsert("audit_log", {
+      id: "aud_" + Math.random().toString(36).substr(2, 9),
+      action: "case_reassigned",
+      actor_type: "admin",
+      actor_id: "admin_clearance",
+      target_type: "consultation",
+      target_id: consId,
+      detail: `Reassigned from Dr. ${fromDocName} to Dr. ${toDocName}. Reason: ${reason}`,
+      created_at: new Date().toISOString()
+    }).catch(e => {
+      console.error("Live audit log write failed:", e);
+    });
+
+    // Create notifications
+    if (fromDoctorId) {
+      supabaseInsert("notifications", {
+        id: "not_" + Math.random().toString(36).substr(2, 9),
+        recipient_id: fromDoctorId,
+        recipient_role: "doctor",
+        type: "flag",
+        title: "Case Reassigned / Removed",
+        message: `Case ${consId} (Patient: ${cons.patient_name || "Patient"}) has been reassigned to ${toDocName} by Admin. Reason: ${reason}`,
+        is_read: false,
+        created_at: new Date().toISOString()
+      }).catch(e => {});
+    }
+
+    if (toDoctorId) {
+      supabaseInsert("notifications", {
+        id: "not_" + Math.random().toString(36).substr(2, 9),
+        recipient_id: toDoctorId,
+        recipient_role: "doctor",
+        type: "new_case",
+        title: "New Case Assigned",
+        message: `A case for patient ${cons.patient_name || "Patient"} has been directly reassigned/assigned to you by Admin. Stage: ${cons.stage || "initial"}.`,
+        is_read: false,
+        created_at: new Date().toISOString()
+      }).catch(e => {});
+
+      // Send WhatsApp notification to the new doctor (fire-and-forget)
+      const waUrl = `${process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co"}/functions/v1/send-whatsapp`;
+      fetch(waUrl, {
+        method: "POST",
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "",
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          phone: toDoc?.phone,
+          template: "new_case_notification",
+          variables: [toDoc?.name, cons.patient_name || "Patient", cons.condition || "telehealth case"]
+        })
+      }).catch(() => {});
+    }
+
+    return { success: true };
+  },
+
+  broadcastMessage: (role: "doctor" | "patient" | "all", title: string, message: string): { success: boolean } => {
+    // Audit log
+    supabaseInsert("audit_log", {
+      id: "aud_" + Math.random().toString(36).substr(2, 9),
+      action: "broadcast_sent",
+      actor_type: "admin",
+      actor_id: "admin_clearance",
+      target_type: "broadcast",
+      target_id: role,
+      detail: `Broadcast [${title}] sent to ${role}. Message: ${message}`,
+      created_at: new Date().toISOString()
+    }).catch(e => {
+      console.error("Live audit log write failed:", e);
+    });
+
+    // Create system notification for all matching roles
+    if (role === "doctor" || role === "all") {
+      const doctors = doctorApi.getAll();
+      doctors.forEach(doc => {
+        supabaseInsert("notifications", {
+          id: "not_" + Math.random().toString(36).substr(2, 9),
+          recipient_id: doc.id,
+          recipient_role: "doctor",
+          type: "broadcast",
+          title,
+          message,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }).catch(e => {});
+      });
+    }
+
+    if (role === "patient" || role === "all") {
+      const patients = patientApi.getAll();
+      patients.forEach(pat => {
+        supabaseInsert("notifications", {
+          id: "not_" + Math.random().toString(36).substr(2, 9),
+          recipient_id: pat.phone,
+          recipient_role: "patient",
+          type: "broadcast",
+          title,
+          message,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }).catch(e => {});
+      });
+    }
+
+    return { success: true };
   }
 };
 
@@ -754,13 +1477,74 @@ export const patientApi = {
     return { success: true, patient: newPatient };
   },
 
-  login: (phone: string, pin: string): { success: boolean; error?: string; patient?: Patient } => {
-    const patients = patientApi.getAll();
-    const patient = patients.find(p => p.phone === phone && p.pin_hash === pin);
-    if (!patient) {
-      return { success: false, error: "Invalid phone number or secure 6-digit PIN." };
+  login: async (phone: string, pin: string): Promise<{ success: boolean; error?: string; patient?: Patient }> => {
+    try {
+      const res = await fetch("/api/auth/patient/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, pin })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const patients = patientApi.getAll();
+        const index = patients.findIndex(p => p.id === data.patient.id);
+        if (index !== -1) {
+          patients[index] = { ...patients[index], ...data.patient };
+        } else {
+          patients.push(data.patient);
+        }
+        localStorage.setItem(KEYS.PATIENTS, JSON.stringify(patients));
+        return { success: true, patient: data.patient };
+      } else {
+        return { success: false, error: data.message || "Login failed." };
+      }
+    } catch (e) {
+      console.error("Patient API login fetch failed, falling back:", e);
+      const patients = patientApi.getAll();
+      const patient = patients.find(p => p.phone === phone && p.pin_hash === pin);
+      if (!patient) {
+        return { success: false, error: "Invalid phone number or secure 6-digit PIN." };
+      }
+      return { success: true, patient };
     }
-    return { success: true, patient };
+  },
+
+  sendOtp: async (phone: string): Promise<{ success: boolean; error?: string; test_bypass?: string }> => {
+    try {
+      const res = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        return { success: true, test_bypass: data.test_bypass };
+      } else {
+        return { success: false, error: data.message || "Failed to dispatch verification code." };
+      }
+    } catch (e) {
+      console.error("OTP send failed:", e);
+      return { success: false, error: "OTP dispatch service offline." };
+    }
+  },
+
+  verifyOtp: async (phone: string, code: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch("/api/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, code })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        return { success: true };
+      } else {
+        return { success: false, error: data.message || "Incorrect verification code." };
+      }
+    } catch (e) {
+      console.error("OTP verify failed:", e);
+      return { success: false, error: "Verification service offline." };
+    }
   }
 };
 

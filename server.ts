@@ -307,6 +307,87 @@ app.get("/api/config", async (req, res, next) => {
   }
 });
 
+let doctorsSeedingInProgress = false;
+
+async function ensureDemoDoctorsSeeded(supabaseUrl: string, supabaseServiceKey: string) {
+  if (doctorsSeedingInProgress) return;
+  doctorsSeedingInProgress = true;
+  try {
+    const checkRes = await fetch(`${supabaseUrl}/rest/v1/doctors?select=id`, {
+      method: "GET",
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json"
+      }
+    });
+    if (checkRes.ok) {
+      const rows = await checkRes.json();
+      if (Array.isArray(rows) && rows.length === 0) {
+        console.log("Doctors table is empty in database. Seeding demo doctors...");
+        const demoDocs = [
+          {
+            id: "doc_1",
+            name: "Dr. Babajide Alao",
+            phone: "+2348031234567",
+            mdcn_folio: "M/10234",
+            apl_year: 2026,
+            pin_hash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", // sha256 of "1234"
+            status: "active",
+            verified: true,
+            bank_name: "Access Bank",
+            bank_account: "0123456789",
+            payout_balance: 150000,
+            flagged: false,
+            earnings_new: 0,
+            earnings_review: 0,
+            total_new: 0,
+            total_review: 0,
+            unpaid_new: 0,
+            unpaid_review: 0
+          },
+          {
+            id: "doc_2",
+            name: "Dr. Chioma Nwachukwu",
+            phone: "+2348123456789",
+            mdcn_folio: "M/09451",
+            apl_year: 2026,
+            pin_hash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", // sha256 of "1234"
+            status: "active",
+            verified: true,
+            bank_name: "Guaranty Trust Bank (GTB)",
+            bank_account: "0987654321",
+            payout_balance: 75000,
+            flagged: false,
+            earnings_new: 0,
+            earnings_review: 0,
+            total_new: 0,
+            total_review: 0,
+            unpaid_new: 0,
+            unpaid_review: 0
+          }
+        ];
+
+        await fetch(`${supabaseUrl}/rest/v1/doctors`, {
+          method: "POST",
+          headers: {
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal"
+          },
+          body: JSON.stringify(demoDocs)
+        });
+        console.log("Demo doctors seeded successfully in Supabase.");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to seed demo doctors in database:", err);
+  } finally {
+    doctorsSeedingInProgress = false;
+  }
+}
+
 // 3. Generic Data Proxy - GET
 app.get("/api/data/:table", enforceAuthorization, async (req, res, next) => {
   try {
@@ -314,6 +395,10 @@ app.get("/api/data/:table", enforceAuthorization, async (req, res, next) => {
     const query = req.url.split("?")[1] || "";
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+
+    if (table === "doctors") {
+      await ensureDemoDoctorsSeeded(supabaseUrl, supabaseServiceKey);
+    }
 
     const url = `${supabaseUrl}/rest/v1/${table}${query ? "?" + query : ""}`;
     const response = await fetch(url, {
@@ -939,6 +1024,8 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
+    await ensureDemoDoctorsSeeded(supabaseUrl, supabaseServiceKey);
+
     const response = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent(mdcn_folio.trim())}`, {
       method: "GET",
       headers: {
@@ -1514,7 +1601,7 @@ app.post("/api/payment/verify", async (req, res, next) => {
         aiSummary = `CLINICAL BRIEF (LOCAL FALLBACK): Patient is a ${patient_age}-year-old reporting ${condition_title} for ${duration || "unspecified period"}. Verify raw answers for contraindications before prescribing.`;
       }
 
-      const newConsultation = {
+      const clientConsultation = {
         id: consId,
         patient_id: "pat_" + Math.random().toString(36).substr(2, 9),
         patient_name,
@@ -1535,6 +1622,29 @@ app.post("/api/payment/verify", async (req, res, next) => {
         messages: []
       };
 
+      const supabaseConsultation = {
+        id: consId,
+        patient_id: clientConsultation.patient_id,
+        patient_phone,
+        condition_id: condition_title,
+        status: "pending",
+        stage: "initial",
+        amount_paid: actualAmount,
+        ai_summary: aiSummary,
+        red_flag: redFlag,
+        red_flag_source: redFlagSource,
+        created_at: clientConsultation.created_at,
+        updated_at: clientConsultation.updated_at,
+        messages: [],
+        form_data: {
+          first_name: patient_name,
+          age: patient_age,
+          duration: duration,
+          answers: raw_answers,
+          symptoms: symptoms
+        }
+      };
+
       const createConsResponse = await fetch(`${supabaseUrl}/rest/v1/consultations`, {
         method: "POST",
         headers: {
@@ -1543,15 +1653,13 @@ app.post("/api/payment/verify", async (req, res, next) => {
           "Content-Type": "application/json",
           Prefer: "return=representation"
         },
-        body: JSON.stringify(newConsultation)
+        body: JSON.stringify(supabaseConsultation)
       });
 
       if (!createConsResponse.ok) {
         const errText = await createConsResponse.text();
         throw new Error(`Failed to create consultation record in Supabase: ${errText}`);
       }
-
-      const createdCons = await createConsResponse.json();
 
       // D. Create payment_credits row (with unassigned doctor initially)
       const creditId = "credit_" + Math.random().toString(36).substr(2, 9);
@@ -1573,8 +1681,8 @@ app.post("/api/payment/verify", async (req, res, next) => {
         })
       });
 
-      // Return verified consultation
-      return res.json({ ok: true, consultation: Array.isArray(createdCons) ? createdCons[0] : newConsultation });
+      // Return verified consultation in client format
+      return res.json({ ok: true, consultation: clientConsultation });
     }
 
     res.status(400).json({ ok: false, code: "VERIFICATION_FAILED", message: "Transaction could not be verified." });

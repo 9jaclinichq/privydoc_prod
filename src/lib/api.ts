@@ -206,34 +206,95 @@ const mapPayoutFromSupabase = (s: any): PayoutRequest => ({
   created_at: s.created_at || new Date().toISOString()
 });
 
-// Background Synchronizer
+// Background Synchronizer with secure role-based scoping
 export async function syncWithSupabase() {
   try {
-    // 1. Sync Patients
-    const dbPatients = await supabaseFetch("patients");
-    if (Array.isArray(dbPatients)) {
-      localStorage.setItem(KEYS.PATIENTS, JSON.stringify(dbPatients.map(mapPatientFromSupabase)));
+    const patientSession = localStorage.getItem("privydoc_patient_session");
+    const doctorSession = localStorage.getItem("privydoc_doctor_session") || localStorage.getItem("privydoc_current_doctor");
+    const adminSession = localStorage.getItem("privydoc_current_admin");
+
+    // 1. ADMIN SESSION: Sync everything
+    if (adminSession === "true" || adminSession) {
+      const dbPatients = await supabaseFetch("patients");
+      if (Array.isArray(dbPatients)) {
+        localStorage.setItem(KEYS.PATIENTS, JSON.stringify(dbPatients.map(mapPatientFromSupabase)));
+      }
+      const dbDoctors = await supabaseFetch("doctors");
+      if (Array.isArray(dbDoctors)) {
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(dbDoctors.map(mapDoctorFromSupabase)));
+      }
+      const dbConsultations = await supabaseFetch("consultations");
+      if (Array.isArray(dbConsultations)) {
+        localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(dbConsultations.map(mapConsultationFromSupabase)));
+      }
+      const dbPayouts = await supabaseFetch("payout_requests");
+      if (Array.isArray(dbPayouts)) {
+        localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(dbPayouts.map(mapPayoutFromSupabase)));
+      }
+    }
+    // 2. CLINICIAN SESSION: Sync doctors, consultations, and payouts (patients are scoped/not required)
+    else if (doctorSession) {
+      let doctorId = "";
+      try {
+        const doc = JSON.parse(doctorSession);
+        doctorId = doc.id || "";
+      } catch (e) {}
+
+      const dbDoctors = await supabaseFetch("doctors");
+      if (Array.isArray(dbDoctors)) {
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(dbDoctors.map(mapDoctorFromSupabase)));
+      }
+      const dbConsultations = await supabaseFetch("consultations");
+      if (Array.isArray(dbConsultations)) {
+        localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(dbConsultations.map(mapConsultationFromSupabase)));
+      }
+      if (doctorId) {
+        const dbPayouts = await supabaseFetch("payout_requests", `?doctor_id=eq.${doctorId}`);
+        if (Array.isArray(dbPayouts)) {
+          localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(dbPayouts.map(mapPayoutFromSupabase)));
+        }
+      }
+    }
+    // 3. PATIENT SESSION: Sync own patient record and own consultations
+    else if (patientSession) {
+      let phone = "";
+      try {
+        const pat = JSON.parse(patientSession);
+        phone = pat.phone || "";
+      } catch (e) {}
+
+      if (phone) {
+        const dbPatients = await supabaseFetch("patients", `?phone=eq.${encodeURIComponent(phone)}`);
+        if (Array.isArray(dbPatients) && dbPatients.length > 0) {
+          const syncedPatient = mapPatientFromSupabase(dbPatients[0]);
+          const patients = JSON.parse(localStorage.getItem(KEYS.PATIENTS) || "[]");
+          const idx = patients.findIndex((p: any) => p.phone === phone);
+          if (idx !== -1) {
+            patients[idx] = syncedPatient;
+          } else {
+            patients.push(syncedPatient);
+          }
+          localStorage.setItem(KEYS.PATIENTS, JSON.stringify(patients));
+        }
+
+        const dbConsultations = await supabaseFetch("consultations", `?patient_phone=eq.${encodeURIComponent(phone)}`);
+        if (Array.isArray(dbConsultations)) {
+          const localCons = JSON.parse(localStorage.getItem(KEYS.CONSULTATIONS) || "[]");
+          const updatedCons = localCons.filter((c: any) => c.patient_phone !== phone);
+          updatedCons.push(...dbConsultations.map(mapConsultationFromSupabase));
+          localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(updatedCons));
+        }
+      }
+    }
+    // 4. ANONYMOUS / VISITOR SESSION: Only sync doctors list (needed for signup validation or displaying names)
+    else {
+      const dbDoctors = await supabaseFetch("doctors");
+      if (Array.isArray(dbDoctors)) {
+        localStorage.setItem(KEYS.DOCTORS, JSON.stringify(dbDoctors.map(mapDoctorFromSupabase)));
+      }
     }
 
-    // 2. Sync Doctors
-    const dbDoctors = await supabaseFetch("doctors");
-    if (Array.isArray(dbDoctors)) {
-      localStorage.setItem(KEYS.DOCTORS, JSON.stringify(dbDoctors.map(mapDoctorFromSupabase)));
-    }
-
-    // 3. Sync Consultations
-    const dbConsultations = await supabaseFetch("consultations");
-    if (Array.isArray(dbConsultations)) {
-      localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(dbConsultations.map(mapConsultationFromSupabase)));
-    }
-
-    // 4. Sync Payout Requests
-    const dbPayouts = await supabaseFetch("payout_requests");
-    if (Array.isArray(dbPayouts)) {
-      localStorage.setItem(KEYS.PAYOUT_REQUESTS, JSON.stringify(dbPayouts.map(mapPayoutFromSupabase)));
-    }
-
-    // 5. Sync Pricing Configurations
+    // 5. Always Sync Pricing Configurations
     try {
       const dbPricing = await supabaseFetch("pricing");
       if (Array.isArray(dbPricing) && dbPricing.length > 0) {

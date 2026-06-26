@@ -193,5 +193,51 @@ INSERT INTO app_config (id, key, value, description)
 VALUES 
   ('11111111-1111-1111-1111-111111111111', 'price_full', '7500', 'Price for full new medical consultation in NGN'),
   ('22222222-2222-2222-2222-222222222222', 'price_review', '3500', 'Price for follow up prescription review in NGN'),
-  ('33333333-3333-3333-3333-333333333333', 'payout_pct', '70', 'Physician payout percentage share (default 70%)')
+  ('33333333-3333-3333-3333-333333333333', 'payout_pct', '70', 'Physician payout percentage share (default 70%)'),
+  ('44444444-4444-4444-4444-444444444444', 'backend_url', 'https://ais-dev-cas6dyyqrpkyiwzm3ynhil-1000302506769.europe-west2.run.app', 'Base URL of the server backend for pg_cron triggers')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- 5. Setup pg_cron & pg_net triggers safely
+CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+CREATE OR REPLACE FUNCTION check_doctor_reminders()
+RETURNS void AS $$
+DECLARE
+  backend_url text;
+BEGIN
+  -- Get active backend URL from app_config
+  SELECT value INTO backend_url FROM app_config WHERE key = 'backend_url';
+  
+  IF backend_url IS NOT NULL THEN
+    -- Trigger HTTP call via pg_net
+    PERFORM net.http_post(
+      url := backend_url || '/api/scheduler/doctor-reminders',
+      headers := '{"Content-Type": "application/json"}'::jsonb
+    );
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Idempotent pg_cron setup block
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    -- Unschedule first if exists
+    PERFORM cron.unschedule('doctor-sla-reminders-job') 
+    FROM cron.job 
+    WHERE jobname = 'doctor-sla-reminders-job';
+
+    -- Schedule job to run hourly (0 * * * *)
+    PERFORM cron.schedule(
+      'doctor-sla-reminders-job',
+      '0 * * * *',
+      'SELECT check_doctor_reminders();'
+    );
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Prevent failure if permissions restrict pg_cron/pg_net extension configuration
+    RAISE NOTICE 'Skipping pg_cron setup due to database limitations/permissions.';
+END;
+$$;

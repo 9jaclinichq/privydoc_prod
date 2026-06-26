@@ -135,7 +135,24 @@ export async function generateConsultationPDF(
     doc.text(`Primary Complaint: ${con.condition}`, 112, 54);
     doc.text(`Diagnosing Clinician: ${con.doctor_name || "Certified Medical Specialist"}`, 112, 59);
     
-    const docFolio = options.doctorMdcnFolio || con.notes?.match(/MDCN Folio:\s*(\w+)/)?.[1] || "MDCN-REGISTERED";
+    let docFolio = options.doctorMdcnFolio;
+    if (!docFolio && con.doctor_id) {
+      try {
+        const doctorsRaw = localStorage.getItem("privydoc_doctors");
+        if (doctorsRaw) {
+          const doctors = JSON.parse(doctorsRaw);
+          const foundDoc = doctors.find((d: any) => d.id === con.doctor_id);
+          if (foundDoc?.mdcn_folio) {
+            docFolio = foundDoc.mdcn_folio;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to retrieve doctor MDCN folio from localStorage:", e);
+      }
+    }
+    if (!docFolio) {
+      docFolio = con.notes?.match(/MDCN Folio:\s*(\w+)/)?.[1] || "MDCN-REGISTERED";
+    }
     doc.text(`Doctor Folio: ${docFolio}`, 112, 64);
 
     // 6. Specialist Referral Specific Layout

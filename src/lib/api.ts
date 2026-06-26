@@ -539,6 +539,41 @@ export const consultationApi = {
         consultations[index].responded_at = new Date().toISOString();
       }
 
+      // Dispatch patient notification on doctor response
+      if (sender === "doctor") {
+        const patientPhone = consultations[index].patient_phone;
+        const patientName = consultations[index].patient_name || "Patient";
+        const doctorName = consultations[index].doctor_name || senderName || "Doctor";
+        const condition = consultations[index].condition || "telehealth case";
+
+        const waUrl = `${process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co"}/functions/v1/send-whatsapp`;
+        fetch(waUrl, {
+          method: "POST",
+          headers: {
+            apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "",
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || ""}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            phone: patientPhone,
+            template: "doctor_responded",
+            variables: [patientName, doctorName, condition]
+          })
+        }).catch(() => {});
+
+        // Also insert an in-app notification for the patient
+        supabaseInsert("notifications", {
+          id: "not_" + Math.random().toString(36).substr(2, 9),
+          recipient_id: patientPhone,
+          recipient_role: "patient",
+          type: "response",
+          title: "Doctor Responded",
+          message: `Your medical specialist Dr. ${doctorName} has responded to your consultation for ${condition}. Please review and check in.`,
+          is_read: false,
+          created_at: new Date().toISOString()
+        }).catch(e => {});
+      }
+
       localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
 
       const currentStage = consultations[index].stage || "initial";

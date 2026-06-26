@@ -1411,7 +1411,9 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                                   <button
                                     type="button"
                                     onClick={async () => {
-                                      await generateConsultationPDF(selectedDoctorCase, "referral");
+                                      await generateConsultationPDF(selectedDoctorCase, "referral", {
+                                        doctorMdcnFolio: currentDoctor?.mdcn_folio
+                                      });
                                     }}
                                     className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-[11px] rounded-xl transition-all flex items-center justify-center gap-1.5"
                                   >

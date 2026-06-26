@@ -25,6 +25,7 @@ jobs:
         run: |
           rm -f package-lock.json
           npm install
+          npm install @tailwindcss/oxide-linux-x64-gnu --no-save
 
       - name: Run TypeScript Type Checker & Linter
         run: npm run lint

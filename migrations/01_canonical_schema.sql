@@ -176,6 +176,9 @@ CREATE TABLE IF NOT EXISTS app_config (
   updated_at timestamptz DEFAULT now()
 );
 
+-- Ensure description column exists if table was created previously without it
+ALTER TABLE app_config ADD COLUMN IF NOT EXISTS description text;
+
 -- 3. Indexes for speed and integrity
 CREATE INDEX IF NOT EXISTS idx_consultations_status ON consultations(status);
 CREATE INDEX IF NOT EXISTS idx_consultations_stage ON consultations(stage);
@@ -188,7 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read ON notifications(rec
 -- 4. Initial app_config seed values
 INSERT INTO app_config (id, key, value, description)
 VALUES 
-  ('cfg_1', 'price_full', '7500', 'Price for full new medical consultation in NGN'),
-  ('cfg_2', 'price_review', '3500', 'Price for follow up prescription review in NGN'),
-  ('cfg_3', 'payout_pct', '70', 'Physician payout percentage share (default 70%)')
+  ('11111111-1111-1111-1111-111111111111', 'price_full', '7500', 'Price for full new medical consultation in NGN'),
+  ('22222222-2222-2222-2222-222222222222', 'price_review', '3500', 'Price for follow up prescription review in NGN'),
+  ('33333333-3333-3333-3333-333333333333', 'payout_pct', '70', 'Physician payout percentage share (default 70%)')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

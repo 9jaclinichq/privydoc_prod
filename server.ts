@@ -8,6 +8,14 @@ import { createHash } from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Align Supabase environment variable names dynamically for seamless fallback
+if (!process.env.VITE_SUPABASE_URL && process.env.SUPABASE_URL) {
+  process.env.VITE_SUPABASE_URL = process.env.SUPABASE_URL;
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE) {
+  process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE;
+}
+
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 

@@ -1387,7 +1387,15 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
   }
 
   // Admin secure default bypass PIN
-  const adminPinSecret = process.env.ADMIN_PIN || "9804";
+  const adminPinSecret = process.env.ADMIN_PIN;
+  if (!adminPinSecret) {
+    console.error("CRITICAL: ADMIN_PIN environment variable is not set. Admin login disabled.");
+    return res.status(503).json({ 
+      ok: false, 
+      code: "CONFIG_ERROR", 
+      message: "Administrative access is currently unavailable." 
+    });
+  }
   if (pin !== adminPinSecret) {
     if (!pinAttempts[key] || now > pinAttempts[key].lockedUntil) {
       pinAttempts[key] = { count: 0, lockedUntil: 0 };

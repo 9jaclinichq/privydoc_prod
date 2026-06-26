@@ -64,14 +64,21 @@ jobs:
         run: gcloud auth configure-docker --quiet
 
       - name: Build and Push Docker Container Image
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }} .
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }}
+          # Convert project ID to lowercase to satisfy Docker repository naming requirements
+          PROJECT_ID_LOWER=$(echo "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')
+          docker build -t gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} .
+          docker push gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }}
 
       - name: Deploy to Cloud Run (Staging Revision - No Traffic)
+        env:
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
+          PROJECT_ID_LOWER=$(echo "$PROJECT_ID" | tr '[:upper:]' '[:lower:]')
           gcloud run deploy privydoc-app-staging \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/privydoc-app:${{ github.sha }} \
+            --image gcr.io/${PROJECT_ID_LOWER}/privydoc-app:${{ github.sha }} \
             --platform managed \
             --region ${{ secrets.GCP_REGION }} \
             --no-traffic \

@@ -174,6 +174,9 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
 app.get("/healthz", (req, res) => {
   res.status(200).json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
 });
+app.get("/api/healthz", (req, res) => {
+  res.status(200).json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
+});
 
 // 2. Server-Cached Config Endpoint (/api/config)
 let configCache: { price_full: number; price_review: number; payout_pct: number; timestamp: number } | null = null;

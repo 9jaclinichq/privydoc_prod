@@ -121,8 +121,8 @@ jobs:
           STAGING_URL=$(gcloud run services describe privydoc-app-staging --platform managed --region ${{ secrets.GCP_REGION }} --format='value(status.url)')
           echo "Running Smoke Checks on $STAGING_URL..."
           
-          echo "=== Debug: GET /healthz ==="
-          curl -i "$STAGING_URL/healthz" || true
+          echo "=== Debug: GET /api/healthz ==="
+          curl -i "$STAGING_URL/api/healthz" || true
           echo ""
           
           echo "=== Debug: GET /api/config ==="
@@ -130,7 +130,7 @@ jobs:
           echo ""
           
           echo "=== Running Strict Verifications ==="
-          curl -f "$STAGING_URL/healthz" || exit 1
+          curl -f "$STAGING_URL/api/healthz" || exit 1
           curl -f "$STAGING_URL/api/config" || exit 1
 
   promote-production:

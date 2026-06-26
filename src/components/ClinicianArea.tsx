@@ -138,6 +138,98 @@ export default function ClinicianArea({
   const [prescriptionMode, setPrescriptionMode] = React.useState<"edit" | "preview">("edit");
   const [responseCentreTab, setResponseCentreTab] = React.useState<"intake" | "summary" | "thinking">("intake");
 
+  // Forgot password/forgot PIN local states
+  const [forgotMode, setForgotMode] = React.useState<"none" | "phone" | "verify">("none");
+  const [forgotFolio, setForgotFolio] = React.useState("");
+  const [forgotPhone, setForgotPhone] = React.useState("");
+  const [forgotOtp, setForgotOtp] = React.useState("");
+  const [forgotNewPin, setForgotNewPin] = React.useState("");
+  const [forgotNewPinConfirm, setForgotNewPinConfirm] = React.useState("");
+  const [isForgotSending, setIsForgotSending] = React.useState(false);
+
+  const handleForgotSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDocError("");
+    setDocSuccess("");
+    if (!forgotFolio || !forgotPhone) {
+      setDocError("MDCN Folio and registered phone number are required.");
+      return;
+    }
+    setIsForgotSending(true);
+    try {
+      // First, verify on backend that this doctor exists and phone matches
+      const res = await fetch(`/api/auth/clinician/verify-forgot?mdcn_folio=${encodeURIComponent(forgotFolio.trim())}&phone=${encodeURIComponent(forgotPhone.trim())}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setDocError(data.message || "No matching active clinician account found.");
+        setIsForgotSending(false);
+        return;
+      }
+      
+      // Send OTP
+      const otpRes = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: forgotPhone })
+      });
+      const otpData = await otpRes.json();
+      if (otpRes.ok && otpData.ok) {
+        setForgotMode("verify");
+        setDocSuccess("Verification code dispatched to your registered WhatsApp number.");
+      } else {
+        setDocError(otpData.message || "Failed to dispatch verification code.");
+      }
+    } catch (err) {
+      setDocError("Security server communication failed. Please try again.");
+    } finally {
+      setIsForgotSending(false);
+    }
+  };
+
+  const handleForgotResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDocError("");
+    setDocSuccess("");
+    if (forgotNewPin.length !== 6 || isNaN(Number(forgotNewPin))) {
+      setDocError("PIN must be exactly 6 numeric digits.");
+      return;
+    }
+    if (forgotNewPin !== forgotNewPinConfirm) {
+      setDocError("PIN confirmation does not match.");
+      return;
+    }
+    setIsForgotSending(true);
+    try {
+      const resetRes = await fetch("/api/auth/clinician/reset-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mdcn_folio: forgotFolio,
+          phone: forgotPhone,
+          otp: forgotOtp,
+          pin: forgotNewPin
+        })
+      });
+      const resetData = await resetRes.json();
+      if (resetRes.ok && resetData.ok) {
+        setDocSuccess("PIN reset successfully! You can now log in with your new passcode.");
+        setForgotMode("none");
+        setForgotFolio("");
+        setForgotPhone("");
+        setForgotOtp("");
+        setForgotNewPin("");
+        setForgotNewPinConfirm("");
+        setDocFolio(forgotFolio);
+      } else {
+        setDocError(resetData.message || "Failed to reset PIN. Verify your OTP is correct.");
+      }
+    } catch (err) {
+      setDocError("Security server verification failed.");
+    } finally {
+      setIsForgotSending(false);
+    }
+  };
+
   // Template and Referral states
   const [refreshTemplatesCounter, setRefreshTemplatesCounter] = React.useState<number>(0);
   const [validationError, setValidationError] = React.useState<string>("");
@@ -443,14 +535,70 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-400">Set Console PIN (Numerical)</label>
-                <input required type="password" placeholder="e.g. ****" value={docRegPin} onChange={(e) => setDocRegPin(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                <label className="text-xs font-bold text-zinc-400">Set Console PIN (6-Digit Numerical)</label>
+                <input required type="password" maxLength={6} pattern="[0-9]*" inputMode="numeric" placeholder="e.g. ••••••" value={docRegPin} onChange={(e) => setDocRegPin(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
               </div>
               <button type="submit" className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow">
                 Submit Practice Application
               </button>
               <button type="button" onClick={() => { setIsRegistering(false); setDocError(""); setDocSuccess(""); }} className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 transition-colors py-1">
                 Already registered? Access Console
+              </button>
+            </form>
+          ) : forgotMode === "phone" ? (
+            /* PIN RECOVERY - REQUEST OTP */
+            <form onSubmit={handleForgotSendOtp} className="space-y-4">
+              <div className="border-b border-zinc-900 pb-3 mb-2">
+                <h4 className="text-sm font-bold text-white flex items-center gap-1.5 font-mono">
+                  <Key className="w-4 h-4 text-[#d4af37]" /> PIN Recovery Portal
+                </h4>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Enter your verified practitioner details to receive a secure recovery passcode via WhatsApp.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-400">Registered MDCN Folio</label>
+                <input required type="text" placeholder="e.g. FM12487" value={forgotFolio} onChange={(e) => setForgotFolio(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-400">Registered WhatsApp Number</label>
+                <input required type="tel" placeholder="e.g. 2348031234567" value={forgotPhone} onChange={(e) => setForgotPhone(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+              </div>
+              <button type="submit" disabled={isForgotSending} className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow disabled:opacity-50">
+                {isForgotSending ? "Verifying Credentials..." : "Dispatch Secure Recovery Code"}
+              </button>
+              <button type="button" onClick={() => { setForgotMode("none"); setDocError(""); setDocSuccess(""); }} className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 transition-colors py-1">
+                Back to console authorization
+              </button>
+            </form>
+          ) : forgotMode === "verify" ? (
+            /* PIN RECOVERY - VERIFY & RESET */
+            <form onSubmit={handleForgotResetSubmit} className="space-y-4">
+              <div className="border-b border-zinc-900 pb-3 mb-2">
+                <h4 className="text-sm font-bold text-white flex items-center gap-1.5 font-mono">
+                  <CheckCircle className="w-4 h-4 text-[#d4af37]" /> Authorize Recovery
+                </h4>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Verification code has been dispatched. Enter the code and set your new practice console passcode.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-400">WhatsApp Passcode (6-Digit)</label>
+                <input required type="text" maxLength={6} placeholder="e.g. 123456" value={forgotOtp} onChange={(e) => setForgotOtp(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37] font-mono tracking-widest text-center text-lg" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-400">Set New Security PIN (6 Digits)</label>
+                <input required type="password" maxLength={6} placeholder="e.g. ******" value={forgotNewPin} onChange={(e) => setForgotNewPin(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-400">Confirm New Security PIN</label>
+                <input required type="password" maxLength={6} placeholder="e.g. ******" value={forgotNewPinConfirm} onChange={(e) => setForgotNewPinConfirm(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+              </div>
+              <button type="submit" disabled={isForgotSending} className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow disabled:opacity-50">
+                {isForgotSending ? "Applying Reset..." : "Apply New Console PIN"}
+              </button>
+              <button type="button" onClick={() => { setForgotMode("none"); setDocError(""); setDocSuccess(""); }} className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 transition-colors py-1">
+                Cancel PIN recovery
               </button>
             </form>
           ) : (
@@ -461,13 +609,18 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                 <input required type="text" placeholder="e.g. FM12487" value={docFolio} onChange={(e) => setDocFolio(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-zinc-400">Console Security PIN</label>
-                <input required type="password" placeholder="e.g. ****" value={docPin} onChange={(e) => setDocPin(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-zinc-400">Console Security PIN (6 Digits)</label>
+                  <button type="button" onClick={() => { setForgotMode("phone"); setForgotFolio(docFolio); setDocError(""); setDocSuccess(""); }} className="text-[10px] text-[#E5C158] hover:underline hover:text-[#d4af37] font-bold">
+                    Forgot security PIN?
+                  </button>
+                </div>
+                <input required type="password" maxLength={6} pattern="[0-9]*" inputMode="numeric" placeholder="e.g. ••••••" value={docPin} onChange={(e) => setDocPin(e.target.value)} className="w-full bg-black border border-zinc-900 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#d4af37]" />
               </div>
               <button type="submit" className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-colors shadow">
                 Authorize Practice Console
               </button>
-              <button type="button" onClick={() => { setIsRegistering(true); setDocError(""); setDocSuccess(""); }} className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 transition-colors py-1">
+              <button type="button" onClick={() => { setIsRegistering(true); setForgotMode("none"); setDocError(""); setDocSuccess(""); }} className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 transition-colors py-1">
                 New physician? Register credentials
               </button>
             </form>

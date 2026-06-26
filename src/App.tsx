@@ -51,6 +51,14 @@ export default function App() {
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPin, setLoginPin] = useState("");
 
+  // Patient secure PIN recovery/forgot states
+  const [patientForgotMode, setPatientForgotMode] = useState<"none" | "phone" | "verify">("none");
+  const [patientForgotPhone, setPatientForgotPhone] = useState("");
+  const [patientForgotOtp, setPatientForgotOtp] = useState("");
+  const [patientForgotNewPin, setPatientForgotNewPin] = useState("");
+  const [patientForgotNewPinConfirm, setPatientForgotNewPinConfirm] = useState("");
+  const [isPatientForgotSending, setIsPatientForgotSending] = useState(false);
+
   const [legalModalOpen, setLegalModalOpen] = useState<"privacy" | "terms" | "medical" | "ndpr" | "refund" | null>(null);
 
   // Patient states
@@ -697,6 +705,85 @@ export default function App() {
     }
   };
 
+  // Patient PIN Recovery Handlers
+  const handlePatientForgotSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patientForgotPhone) {
+      alert("Registered phone number is required.");
+      return;
+    }
+    setIsPatientForgotSending(true);
+    try {
+      // First, verify that this patient exists in DB
+      const res = await fetch(`/api/auth/patient/verify-forgot?phone=${encodeURIComponent(patientForgotPhone.trim())}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(data.message || "No matching patient vault found for this number.");
+        setIsPatientForgotSending(false);
+        return;
+      }
+
+      // Send OTP
+      const otpRes = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: patientForgotPhone })
+      });
+      const otpData = await otpRes.json();
+      if (otpRes.ok && otpData.ok) {
+        setPatientForgotMode("verify");
+        alert("Verification code has been dispatched to your registered WhatsApp number.");
+      } else {
+        alert(otpData.message || "Failed to dispatch verification code.");
+      }
+    } catch (err) {
+      alert("Security service communication failed.");
+    } finally {
+      setIsPatientForgotSending(false);
+    }
+  };
+
+  const handlePatientForgotResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (patientForgotNewPin.length !== 6 || isNaN(Number(patientForgotNewPin))) {
+      alert("PIN must be exactly 6 numeric digits.");
+      return;
+    }
+    if (patientForgotNewPin !== patientForgotNewPinConfirm) {
+      alert("PIN confirmation does not match.");
+      return;
+    }
+    setIsPatientForgotSending(true);
+    try {
+      const resetRes = await fetch("/api/auth/patient/reset-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: patientForgotPhone,
+          otp: patientForgotOtp,
+          pin: patientForgotNewPin
+        })
+      });
+      const resetData = await resetRes.json();
+      if (resetRes.ok && resetData.ok) {
+        alert("Your Secure Vault PIN has been reset successfully! You can now log in with your new passcode.");
+        setPatientForgotMode("none");
+        setPatientForgotPhone("");
+        setPatientForgotOtp("");
+        setPatientForgotNewPin("");
+        setPatientForgotNewPinConfirm("");
+        setLoginPhone(patientForgotPhone);
+        setPatientSubView("login");
+      } else {
+        alert(resetData.message || "Failed to reset vault PIN. Verify your OTP is correct.");
+      }
+    } catch (err) {
+      alert("Security service verification failed.");
+    } finally {
+      setIsPatientForgotSending(false);
+    }
+  };
+
   // Secure Vault Unlock PIN verification
   const handleUnlockSession = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1029,54 +1116,80 @@ export default function App() {
 
           {/* Luxury Navigation Role Switcher */}
           <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-900">
-            <button
-              onClick={() => {
-                switchRoleSafely("patient", () => {
-                  setActiveTab("patient"); 
-                  setPatientSubView("landing"); 
-                  setSelectedCase(null);
-                });
-              }}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeTab === "patient" 
-                  ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Patient Vault
-            </button>
-            {(showHiddenRoles || activeTab === "clinician" || activeTab === "admin") && (
+            {isAdminAuthenticated ? (
+              /* Active Admin Session - Only show Admin Tab */
+              <button
+                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-rose-600/10 text-rose-400 border border-rose-500/15 cursor-default"
+              >
+                Admin Office Active
+              </button>
+            ) : currentDoctor ? (
+              /* Active Doctor Session - Only show Clinician Tab */
+              <button
+                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15 cursor-default"
+              >
+                Clinician Area Active
+              </button>
+            ) : patientSession ? (
+              /* Active Patient Session - Only show Patient Tab */
+              <button
+                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15 cursor-default"
+              >
+                Patient Vault Active
+              </button>
+            ) : (
+              /* Public View - Show Role Selection Tabs */
               <>
                 <button
                   onClick={() => {
-                    switchRoleSafely("clinician", () => {
-                      setActiveTab("clinician"); 
-                      setDocError(""); 
-                      setDocSuccess("");
+                    switchRoleSafely("patient", () => {
+                      setActiveTab("patient"); 
+                      setPatientSubView("landing"); 
+                      setSelectedCase(null);
                     });
                   }}
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === "clinician" 
+                    activeTab === "patient" 
                       ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  Clinician Area
+                  Patient Vault
                 </button>
-                <button
-                  onClick={() => {
-                    switchRoleSafely("admin", () => {
-                      setActiveTab("admin");
-                    });
-                  }}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === "admin" 
-                      ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
-                      : "text-zinc-500 hover:text-rose-400"
-                  }`}
-                >
-                  Admin Office
-                </button>
+                {(showHiddenRoles || activeTab === "clinician" || activeTab === "admin") && (
+                  <>
+                    <button
+                      onClick={() => {
+                        switchRoleSafely("clinician", () => {
+                          setActiveTab("clinician"); 
+                          setDocError(""); 
+                          setDocSuccess("");
+                        });
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        activeTab === "clinician" 
+                          ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      Clinician Area
+                    </button>
+                    <button
+                      onClick={() => {
+                        switchRoleSafely("admin", () => {
+                          setActiveTab("admin");
+                        });
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        activeTab === "admin" 
+                          ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
+                          : "text-zinc-500 hover:text-rose-400"
+                      }`}
+                    >
+                      Admin Office
+                    </button>
+                  </>
+                )}
               </>
             )}
           </nav>
@@ -1270,7 +1383,7 @@ export default function App() {
                       onChange={(e) => setRegEmail(e.target.value)}
                       className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 transition-colors"
                     />
-                    <p className="text-[9.5px] text-zinc-600 font-sans">For secure duplicate clinical records distribution.</p>
+                    <p className="text-[9px] text-zinc-600 font-sans">Used to receive secure backup copies of your medical outcomes.</p>
                   </div>
 
                   {/* Consent Checkbox */}
@@ -1403,65 +1516,191 @@ export default function App() {
             {patientSubView === "login" && (
               <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-6 shadow-2xl animate-fade-in relative">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-[#d4af37]" />
-                <div className="text-center space-y-2">
-                  <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Unlock Secure Vault</h4>
-                  <p className="text-xs text-zinc-500 font-sans">Confidential clinical portal access.</p>
-                </div>
+                
+                {patientForgotMode === "phone" ? (
+                  /* PATIENT PIN RECOVERY - REQUEST OTP */
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Vault PIN Recovery</h4>
+                      <p className="text-xs text-zinc-500 font-sans">Verify your registered number to receive a secure recovery code via WhatsApp.</p>
+                    </div>
 
-                <form onSubmit={handlePatientLoginSubmit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="login-phone" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Registered WhatsApp Number</label>
-                    <input 
-                      id="login-phone"
-                      type="tel"
-                      required
-                      placeholder="e.g. +234 803 123 4567"
-                      value={loginPhone}
-                      onChange={(e) => setLoginPhone(e.target.value)}
-                      className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono"
-                    />
+                    <form onSubmit={handlePatientForgotSendOtp} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label htmlFor="forgot-patient-phone" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Registered WhatsApp Number</label>
+                        <input 
+                          id="forgot-patient-phone"
+                          type="tel"
+                          required
+                          placeholder="e.g. +234 803 123 4567"
+                          value={patientForgotPhone}
+                          onChange={(e) => setPatientForgotPhone(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono"
+                        />
+                      </div>
+
+                      <button 
+                        type="submit"
+                        disabled={isPatientForgotSending}
+                        className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow disabled:opacity-50"
+                      >
+                        {isPatientForgotSending ? "Verifying..." : "Dispatch Secure Code"}
+                      </button>
+                    </form>
+
+                    <div className="text-center pt-2">
+                      <button 
+                        type="button"
+                        onClick={() => { setPatientForgotMode("none"); }}
+                        className="text-[10px] font-mono text-[#E5C158] hover:underline"
+                      >
+                        Back to Vault Unlock
+                      </button>
+                    </div>
                   </div>
+                ) : patientForgotMode === "verify" ? (
+                  /* PATIENT PIN RECOVERY - VERIFY & RESET */
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Authorize Reset</h4>
+                      <p className="text-xs text-zinc-500 font-sans">Verification code has been dispatched. Set your new clinical vault security PIN.</p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="login-pin" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Enter 6-Digit PIN</label>
-                    <input 
-                      id="login-pin"
-                      type="password"
-                      required
-                      maxLength={6}
-                      pattern="[0-9]*"
-                      inputMode="numeric"
-                      placeholder="••••••"
-                      value={loginPin}
-                      onChange={(e) => setLoginPin(e.target.value)}
-                      className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-center text-sm font-mono tracking-widest text-white focus:outline-none placeholder-zinc-850"
-                    />
+                    <form onSubmit={handlePatientForgotResetSubmit} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label htmlFor="forgot-patient-otp" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">WhatsApp Code (6-Digit)</label>
+                        <input 
+                          id="forgot-patient-otp"
+                          type="text"
+                          required
+                          maxLength={6}
+                          placeholder="e.g. 123456"
+                          value={patientForgotOtp}
+                          onChange={(e) => setPatientForgotOtp(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-center text-sm font-mono tracking-widest text-white focus:outline-none placeholder-zinc-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="forgot-patient-new-pin" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">New 6-Digit PIN</label>
+                        <input 
+                          id="forgot-patient-new-pin"
+                          type="password"
+                          required
+                          maxLength={6}
+                          placeholder="e.g. ••••••"
+                          value={patientForgotNewPin}
+                          onChange={(e) => setPatientForgotNewPin(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-center text-sm font-mono tracking-widest text-white focus:outline-none placeholder-zinc-700"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label htmlFor="forgot-patient-new-pin-confirm" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Confirm New PIN</label>
+                        <input 
+                          id="forgot-patient-new-pin-confirm"
+                          type="password"
+                          required
+                          maxLength={6}
+                          placeholder="e.g. ••••••"
+                          value={patientForgotNewPinConfirm}
+                          onChange={(e) => setPatientForgotNewPinConfirm(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-center text-sm font-mono tracking-widest text-white focus:outline-none placeholder-zinc-700"
+                        />
+                      </div>
+
+                      <button 
+                        type="submit"
+                        disabled={isPatientForgotSending}
+                        className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow disabled:opacity-50"
+                      >
+                        {isPatientForgotSending ? "Applying Reset..." : "Establish New Vault PIN"}
+                      </button>
+                    </form>
+
+                    <div className="text-center pt-2">
+                      <button 
+                        type="button"
+                        onClick={() => { setPatientForgotMode("none"); }}
+                        className="text-[10px] font-mono text-[#E5C158] hover:underline"
+                      >
+                        Cancel Recovery
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  /* STANDARD LOGIN SCREEN */
+                  <>
+                    <div className="text-center space-y-2">
+                      <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Unlock Secure Vault</h4>
+                      <p className="text-xs text-zinc-500 font-sans">Confidential clinical portal access.</p>
+                    </div>
 
-                  <button 
-                    type="submit"
-                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow"
-                  >
-                    Unlock Secure Vault
-                  </button>
-                </form>
+                    <form onSubmit={handlePatientLoginSubmit} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label htmlFor="login-phone" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Registered WhatsApp Number</label>
+                        <input 
+                          id="login-phone"
+                          type="tel"
+                          required
+                          placeholder="e.g. +234 803 123 4567"
+                          value={loginPhone}
+                          onChange={(e) => setLoginPhone(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 font-mono"
+                        />
+                      </div>
 
-                <div className="text-center pt-2 flex justify-between text-[10px] font-mono text-zinc-500">
-                  <button 
-                    type="button"
-                    onClick={() => setPatientSubView("register")}
-                    className="hover:text-zinc-300 transition-colors"
-                  >
-                    Establish New Vault
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setPatientSubView("landing")}
-                    className="hover:text-zinc-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <label htmlFor="login-pin" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold">Enter 6-Digit PIN</label>
+                          <button 
+                            type="button"
+                            onClick={() => { setPatientForgotMode("phone"); setPatientForgotPhone(loginPhone); }}
+                            className="text-[9.5px] font-mono text-[#E5C158] hover:underline font-bold"
+                          >
+                            Forgot PIN?
+                          </button>
+                        </div>
+                        <input 
+                          id="login-pin"
+                          type="password"
+                          required
+                          maxLength={6}
+                          pattern="[0-9]*"
+                          inputMode="numeric"
+                          placeholder="••••••"
+                          value={loginPin}
+                          onChange={(e) => setLoginPin(e.target.value)}
+                          className="w-full bg-black border border-zinc-900 focus:border-amber-500/30 rounded-xl px-4 py-3 text-center text-sm font-mono tracking-widest text-white focus:outline-none placeholder-zinc-850"
+                        />
+                      </div>
+
+                      <button 
+                        type="submit"
+                        className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow"
+                      >
+                        Unlock Secure Vault
+                      </button>
+                    </form>
+
+                    <div className="text-center pt-2 flex justify-between text-[10px] font-mono text-zinc-500">
+                      <button 
+                        type="button"
+                        onClick={() => setPatientSubView("register")}
+                        className="hover:text-zinc-300 transition-colors"
+                      >
+                        Establish New Vault
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setPatientSubView("landing")}
+                        className="hover:text-zinc-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

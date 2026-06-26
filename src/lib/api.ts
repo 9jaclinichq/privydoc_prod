@@ -2,6 +2,7 @@ import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest, PricingConfi
 import { DEMO_DOCTORS, DEMO_CONSULTATIONS } from "../data";
 import { generateId } from "../utils";
 import { getStageLabel } from "../lifecycle";
+import { sha256 } from "../utils/clinical";
 
 import { DATA } from "../services/data";
 
@@ -290,7 +291,7 @@ export const doctorApi = {
       phone,
       mdcn_folio,
       apl_year,
-      pin_hash: pin,
+      pin_hash: sha256(pin),
       status: "pending",
       verified: false,
       payout_balance: 0
@@ -1513,7 +1514,7 @@ export const patientApi = {
       age,
       state,
       email,
-      pin_hash: pin
+      pin_hash: sha256(pin)
     };
 
     patients.push(newPatient);

@@ -79,7 +79,19 @@ export default function App() {
   const [patientPhone, setPatientPhone] = useState("");
   const [patientAge, setPatientAge] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
-  const [selectedCase, setSelectedCase] = useState<Consultation | null>(null);
+  const [selectedCase, setSelectedCase] = useState<Consultation | null>(() => {
+    try {
+      const saved = localStorage.getItem("privydoc_patient_session");
+      if (saved) {
+        const patient = JSON.parse(saved);
+        const cases = consultationApi.getByPatientPhone(patient.phone);
+        return cases.length > 0 ? cases[0] : null;
+      }
+    } catch (e) {
+      console.error("Failed to parse patient session for selectedCase initialization", e);
+    }
+    return null;
+  });
   const [patientMessage, setPatientMessage] = useState("");
   const [checkoutStep, setCheckoutStep] = useState<"form" | "payment" | "success" | "red_flag">("form");
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
@@ -1223,7 +1235,15 @@ export default function App() {
               <PatientLanding 
                 onSelectSymptom={handleSymptomSelect}
                 onStartIntake={handleStartIntake}
-                onEnterPortal={() => setPatientSubView("portal")}
+                onEnterPortal={() => {
+                  if (patientSession && !selectedCase) {
+                    const cases = consultationApi.getByPatientPhone(patientSession.phone);
+                    if (cases.length > 0) {
+                      setSelectedCase(cases[0]);
+                    }
+                  }
+                  setPatientSubView("portal");
+                }}
                 searchPhone={searchPhone}
                 setSearchPhone={setSearchPhone}
                 onSearchPortal={handleSearchPatientPortal}

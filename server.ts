@@ -438,6 +438,30 @@ app.post("/api/data/:table", enforceAuthorization, (req, res, next) => {
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
+    if (table === "patients") {
+      const { phone } = req.body;
+      if (phone) {
+        const sanitizedPhone = normPhone(phone);
+        req.body.phone = sanitizedPhone;
+
+        // check for duplicate phone numbers
+        const dupResponse = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}&limit=1`, {
+          method: "GET",
+          headers: {
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json"
+          }
+        });
+        if (dupResponse.ok) {
+          const dupPatients = await dupResponse.json();
+          if (Array.isArray(dupPatients) && dupPatients.length > 0) {
+            return res.status(409).json({ ok: false, code: "DUPLICATE_PHONE", message: "A patient with this phone number is already registered." });
+          }
+        }
+      }
+    }
+
     const url = `${supabaseUrl}/rest/v1/${table}`;
     const response = await fetch(url, {
       method: "POST",
@@ -925,10 +949,7 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number and PIN are required." });
   }
 
-  let sanitizedPhone = phone.replace(/[\s\-\(\)\+]/g, "");
-  if (sanitizedPhone.startsWith("0")) {
-    sanitizedPhone = "234" + sanitizedPhone.slice(1);
-  }
+  const sanitizedPhone = normPhone(phone);
 
   const key = `patient:${sanitizedPhone}`;
   const now = Date.now();

@@ -756,15 +756,26 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
             template: {
               name: "privydoc_otp",
               language: {
-                code: "en_US"
+                code: "en"
               },
               components: [
                 {
-                  "type": "body",
-                  "parameters": [
+                  type: "body",
+                  parameters: [
                     {
-                      "type": "text",
-                      "text": code
+                      type: "text",
+                      text: code
+                    }
+                  ]
+                },
+                {
+                  type: "button",
+                  sub_type: "url",
+                  index: "0",
+                  parameters: [
+                    {
+                      type: "text",
+                      text: code
                     }
                   ]
                 }

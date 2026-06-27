@@ -1542,19 +1542,20 @@ export const patientApi = {
   },
 
   getByPhone: (phone: string): Patient | undefined => {
-    return patientApi.getAll().find(p => p.phone === phone);
+    return patientApi.getAll().find(p => p.phone === normPhone(phone));
   },
 
   register: (name: string, phone: string, age: number, state: string, email: string, pin: string): { success: boolean; error?: string; patient?: Patient } => {
+    const normalizedPhone = normPhone(phone);
     const patients = patientApi.getAll();
-    if (patients.some(p => p.phone === phone)) {
+    if (patients.some(p => p.phone === normalizedPhone)) {
       return { success: false, error: "An account with this phone number already exists." };
     }
 
     const newPatient: Patient = {
       id: generateId("pat"),
       name,
-      phone,
+      phone: normalizedPhone,
       age,
       state,
       email,

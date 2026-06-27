@@ -1,4 +1,4 @@
-// Production build - force redeploy June 2026
+// Redeploy - IAM Secret Manager permissions granted
 import express from "express";
 import cors from "cors";
 import path from "path";

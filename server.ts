@@ -1702,7 +1702,7 @@ app.post("/api/payment/verify", async (req, res, next) => {
 });
 
 // 2. Flutterwave Webhook
-app.post("/api/payment/webhook", async (req, res, next) => {
+app.post(["/api/payment/webhook", "/api/webhooks/flutterwave"], async (req, res, next) => {
   try {
     const signature = req.headers["verif-hash"];
     const flwWebhookHash = process.env.FLW_WEBHOOK_HASH;

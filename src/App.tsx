@@ -612,6 +612,14 @@ export default function App() {
     // Check if patient exists
     const existingPatient = patientApi.getByPhone(searchPhone);
     if (existingPatient) {
+      if (patientSession && normPhone(patientSession.phone) === normPhone(searchPhone)) {
+        const cases = consultationApi.getByPatientPhone(searchPhone);
+        if (cases.length > 0) {
+          setSelectedCase(cases[0]);
+        }
+        setPatientSubView("portal");
+        return;
+      }
       setLoginPhone(searchPhone);
       setPatientSubView("login");
     } else {
@@ -863,6 +871,13 @@ export default function App() {
         setIsPatientSessionLocked(false);
         setUnlockPin("");
         localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+        if (patientSession) {
+          const cases = consultationApi.getByPatientPhone(patientSession.phone);
+          if (cases.length > 0) {
+            setSelectedCase(cases[0]);
+          }
+        }
+        setPatientSubView("portal");
       } else {
         setUnlockError(data.message || "Incorrect 6-digit PIN.");
       }
@@ -871,6 +886,11 @@ export default function App() {
         setIsPatientSessionLocked(false);
         setUnlockPin("");
         localStorage.setItem("privydoc_patient_last_active", Date.now().toString());
+        const cases = consultationApi.getByPatientPhone(patientSession.phone);
+        if (cases.length > 0) {
+          setSelectedCase(cases[0]);
+        }
+        setPatientSubView("portal");
       } else {
         setUnlockError("Invalid PIN. Vault access denied.");
       }
@@ -1822,6 +1842,8 @@ export default function App() {
                 onStartNewCase={() => setPatientSubView("landing")}
                 formatDate={formatDate}
                 formatNaira={formatNaira}
+                onLogout={handlePatientLogout}
+                patientName={patientSession?.name || ""}
               />
             )}
 

@@ -22,6 +22,8 @@ interface PatientPortalProps {
   onStartNewCase: () => void;
   formatDate: (d: string) => string;
   formatNaira: (n: number) => string;
+  onLogout?: () => void;
+  patientName?: string;
 }
 
 export default function PatientPortal({
@@ -36,7 +38,9 @@ export default function PatientPortal({
   onSendPatientMessage,
   onStartNewCase,
   formatDate,
-  formatNaira
+  formatNaira,
+  onLogout,
+  patientName = ""
 }: PatientPortalProps) {
   // Sidebar state
   const [activeSidebarTab, setActiveSidebarTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "payments">("dashboard");
@@ -48,6 +52,12 @@ export default function PatientPortal({
   const [disputeReason, setDisputeReason] = useState<string>("Doctor did not prescribe the expected medication.");
   const [submittingDispute, setSubmittingDispute] = useState<boolean>(false);
   const [disputeError, setDisputeError] = useState<string>("Invalid input.");
+
+  React.useEffect(() => {
+    if (!selectedCase && allCases && allCases.length > 0) {
+      setSelectedCase(allCases[0]);
+    }
+  }, [selectedCase, allCases, setSelectedCase]);
 
   React.useEffect(() => {
     if (selectedCase?.id) {
@@ -85,7 +95,7 @@ export default function PatientPortal({
   return (
     <div className="w-full">
       {/* 1. ARCHIVES LOOKUP BARRIER */}
-      {!selectedCase ? (
+      {!selectedCase && allCases && allCases.length > 0 ? (
         <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-6 text-center animate-slide-up relative">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-[#d4af37]" />
           
@@ -135,10 +145,16 @@ export default function PatientPortal({
           <div className="lg:hidden flex justify-between items-center bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
             <div>
               <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500 font-bold">PrivyDoc Vault</p>
-              <h4 className="text-xs font-bold text-[#E5C158] truncate max-w-[150px]">{selectedCase.patient_name}</h4>
+              <h4 className="text-xs font-bold text-[#E5C158] truncate max-w-[150px]">{selectedCase?.patient_name || patientName || "Confidential Patient"}</h4>
             </div>
             <button 
-              onClick={() => setSelectedCase(null)}
+              onClick={() => {
+                if (onLogout) {
+                  onLogout();
+                } else {
+                  setSelectedCase(null);
+                }
+              }}
               className="px-2.5 py-1 text-[10px] font-bold border border-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors"
             >
               Log Out
@@ -150,10 +166,16 @@ export default function PatientPortal({
             <div className="pb-4 border-b border-zinc-900 flex justify-between items-center">
               <div>
                 <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Confidential Portal</p>
-                <h4 className="text-xs font-bold text-[#E5C158] mt-0.5 truncate max-w-[120px]">{selectedCase.patient_name}</h4>
+                <h4 className="text-xs font-bold text-[#E5C158] mt-0.5 truncate max-w-[120px]">{selectedCase?.patient_name || patientName || "Confidential Patient"}</h4>
               </div>
               <button 
-                onClick={() => setSelectedCase(null)}
+                onClick={() => {
+                  if (onLogout) {
+                    onLogout();
+                  } else {
+                    setSelectedCase(null);
+                  }
+                }}
                 className="px-2.5 py-1 text-[10px] font-bold border border-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors"
               >
                 Log Out
@@ -256,120 +278,147 @@ export default function PatientPortal({
             {/* VIEW A: PATIENT MAIN DASHBOARD */}
             {activeSidebarTab === "dashboard" && (
               <div className="space-y-6 animate-fade-in">
-                {/* Cardiovascular Safety Alert Banner */}
-                {selectedCase.red_flag && (
-                  <div className="bg-rose-500/10 border-2 border-rose-500/20 p-6 rounded-2xl space-y-3 animate-fade-in">
-                    <div className="flex items-center gap-2.5 text-rose-400 font-extrabold text-sm">
-                      <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0" />
-                      CARDIOVASCULAR SAFETY BLOCK
+                {!selectedCase ? (
+                  <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-8 text-center space-y-6 animate-slide-up relative overflow-hidden">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-1 bg-[#d4af37]" />
+                    <div className="w-12 h-12 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto">
+                      <Activity className="w-5 h-5" />
                     </div>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Our clinical safety sweeps have flagged severe cardiovascular safety risks in your intake questionnaires. 
-                      Because of these high-risk contraindications, remote online prescription authorization has been blocked to protect your health.
-                    </p>
-                    <div className="pt-1.5 border-t border-rose-500/10">
-                      <p className="text-[11px] text-[#E5C158] font-bold font-mono uppercase tracking-wider">
-                        🚨 RECOMMENDED: Please visit a local clinic or physical hospital for an in-person diagnostic workup.
+                    <div className="space-y-2 max-w-md mx-auto">
+                      <h3 className="text-lg font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        Confidential Patient Vault
+                      </h3>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        No active consultations yet. Select a condition above to begin your confidential clinical assessment.
                       </p>
                     </div>
+                    <div className="pt-2">
+                      <button 
+                        onClick={onStartNewCase}
+                        className="px-6 py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-colors shadow flex items-center justify-center gap-2 mx-auto"
+                      >
+                        Start Clinical Assessment <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    {/* Cardiovascular Safety Alert Banner */}
+                    {selectedCase.red_flag && (
+                      <div className="bg-rose-500/10 border-2 border-rose-500/20 p-6 rounded-2xl space-y-3 animate-fade-in">
+                        <div className="flex items-center gap-2.5 text-rose-400 font-extrabold text-sm">
+                          <ShieldAlert className="w-5 h-5 text-rose-500 shrink-0" />
+                          CARDIOVASCULAR SAFETY BLOCK
+                        </div>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Our clinical safety sweeps have flagged severe cardiovascular safety risks in your intake questionnaires. 
+                          Because of these high-risk contraindications, remote online prescription authorization has been blocked to protect your health.
+                        </p>
+                        <div className="pt-1.5 border-t border-rose-500/10">
+                          <p className="text-[11px] text-[#E5C158] font-bold font-mono uppercase tracking-wider">
+                            🚨 RECOMMENDED: Please visit a local clinic or physical hospital for an in-person diagnostic workup.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Greeting Banner */}
+                    <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-black rounded-2xl border border-zinc-900 p-6 relative overflow-hidden">
+                      <div className="absolute inset-y-0 right-0 w-32 bg-[radial-gradient(circle_at_100%_50%,rgba(212,175,55,0.06),transparent)] pointer-events-none" />
+                      <div className="space-y-1.5 max-w-xl">
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Good evening</p>
+                        <h3 className="text-2xl font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          Welcome back, {selectedCase.patient_name}.
+                        </h3>
+                        <p className="text-xs text-zinc-400 leading-relaxed">
+                          Your confidential clinical logs and medical file <strong className="text-white font-mono">{selectedCase.id}</strong> are secure inside your digital vault.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Active Case Summary Widget */}
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4">
+                      <div className="flex justify-between items-start gap-4">
+                        <div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            selectedCase.red_flag
+                              ? "bg-rose-500/15 text-rose-400"
+                              : selectedCase.status === "completed" 
+                                ? "bg-emerald-500/15 text-emerald-400" 
+                                : selectedCase.status === "active" 
+                                  ? "bg-amber-500/15 text-amber-400 animate-pulse" 
+                                  : "bg-blue-500/15 text-blue-400"
+                          }`}>
+                            {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
+                          </span>
+                          <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
+                          <p className="text-xs text-zinc-400 mt-1">Consultation ID: {selectedCase.id} • Registered {formatDate(selectedCase.created_at)}</p>
+                        </div>
+
+                        <button 
+                          onClick={() => !selectedCase.red_flag && setActiveSidebarTab("messages")}
+                          disabled={selectedCase.red_flag}
+                          className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-bold text-xs rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {selectedCase.red_flag ? "Safety Blocked" : "Consult Doctor"}
+                        </button>
+                      </div>
+
+                      <div className="pt-4 border-t border-zinc-900 grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">Assigned Doctor</p>
+                          <p className="font-bold text-white mt-0.5">{selectedCase.doctor_name || "Assigning clinical specialist..."}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">Evaluation Fee</p>
+                          <p className="font-bold text-white mt-0.5">{formatNaira(selectedCase.amount_paid)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">SLA check-in</p>
+                          <p className="font-bold text-zinc-300 mt-0.5">Day 2 check-in</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">Follow-up</p>
+                          <p className="font-bold text-zinc-300 mt-0.5">May 12, 2025</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Health Summary (Mockup Grid) */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
+                        <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Blood Pressure</p>
+                        <p className="text-sm font-bold text-emerald-400">120/80 (Normal)</p>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
+                        <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">BMI Index</p>
+                        <p className="text-sm font-bold text-[#E5C158]">24.7 (Healthy)</p>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
+                        <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Cardio risk</p>
+                        <p className="text-sm font-bold text-emerald-400">Low</p>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
+                        <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Sleep Quality</p>
+                        <p className="text-sm font-bold text-zinc-300">7.5 hrs/night</p>
+                      </div>
+                    </div>
+
+                    {/* Quick Launcher for new files */}
+                    <div className="p-6 bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col sm:flex-row justify-between items-center gap-4">
+                      <div>
+                        <h5 className="font-bold text-white text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Experience secondary concerns?</h5>
+                        <p className="text-xs text-zinc-400 mt-0.5">File an additional medical category case with another specialist.</p>
+                      </div>
+                      <button 
+                        onClick={onStartNewCase}
+                        className="px-4 py-2 border border-amber-500/25 text-[#E5C158] hover:bg-[#d4af37]/5 font-bold text-xs rounded-xl transition-colors"
+                      >
+                        Start New Program Case
+                      </button>
+                    </div>
+                  </>
                 )}
-
-                {/* Greeting Banner */}
-                <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-black rounded-2xl border border-zinc-900 p-6 relative overflow-hidden">
-                  <div className="absolute inset-y-0 right-0 w-32 bg-[radial-gradient(circle_at_100%_50%,rgba(212,175,55,0.06),transparent)] pointer-events-none" />
-                  <div className="space-y-1.5 max-w-xl">
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Good evening</p>
-                    <h3 className="text-2xl font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Welcome back, {selectedCase.patient_name}.
-                    </h3>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Your confidential clinical logs and medical file <strong className="text-white font-mono">{selectedCase.id}</strong> are secure inside your digital vault.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Active Case Summary Widget */}
-                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4">
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                        selectedCase.red_flag
-                          ? "bg-rose-500/15 text-rose-400"
-                          : selectedCase.status === "completed" 
-                            ? "bg-emerald-500/15 text-emerald-400" 
-                            : selectedCase.status === "active" 
-                              ? "bg-amber-500/15 text-amber-400 animate-pulse" 
-                              : "bg-blue-500/15 text-blue-400"
-                      }`}>
-                        {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
-                      </span>
-                      <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
-                      <p className="text-xs text-zinc-400 mt-1">Consultation ID: {selectedCase.id} • Registered {formatDate(selectedCase.created_at)}</p>
-                    </div>
-
-                    <button 
-                      onClick={() => !selectedCase.red_flag && setActiveSidebarTab("messages")}
-                      disabled={selectedCase.red_flag}
-                      className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-bold text-xs rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {selectedCase.red_flag ? "Safety Blocked" : "Consult Doctor"}
-                    </button>
-                  </div>
-
-                  <div className="pt-4 border-t border-zinc-900 grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <p className="text-[10px] text-zinc-500 font-mono">Assigned Doctor</p>
-                      <p className="font-bold text-white mt-0.5">{selectedCase.doctor_name || "Assigning clinical specialist..."}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 font-mono">Evaluation Fee</p>
-                      <p className="font-bold text-white mt-0.5">{formatNaira(selectedCase.amount_paid)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 font-mono">SLA check-in</p>
-                      <p className="font-bold text-zinc-300 mt-0.5">Day 2 check-in</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-zinc-500 font-mono">Follow-up</p>
-                      <p className="font-bold text-zinc-300 mt-0.5">May 12, 2025</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Interactive Health Summary (Mockup Grid) */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
-                    <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Blood Pressure</p>
-                    <p className="text-sm font-bold text-emerald-400">120/80 (Normal)</p>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
-                    <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">BMI Index</p>
-                    <p className="text-sm font-bold text-[#E5C158]">24.7 (Healthy)</p>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
-                    <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Cardio risk</p>
-                    <p className="text-sm font-bold text-emerald-400">Low</p>
-                  </div>
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
-                    <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Sleep Quality</p>
-                    <p className="text-sm font-bold text-zinc-300">7.5 hrs/night</p>
-                  </div>
-                </div>
-
-                {/* Quick Launcher for new files */}
-                <div className="p-6 bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div>
-                    <h5 className="font-bold text-white text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Experience secondary concerns?</h5>
-                    <p className="text-xs text-zinc-400 mt-0.5">File an additional medical category case with another specialist.</p>
-                  </div>
-                  <button 
-                    onClick={onStartNewCase}
-                    className="px-4 py-2 border border-amber-500/25 text-[#E5C158] hover:bg-[#d4af37]/5 font-bold text-xs rounded-xl transition-colors"
-                  >
-                    Start New Program Case
-                  </button>
-                </div>
               </div>
             )}
 
@@ -425,7 +474,15 @@ export default function PatientPortal({
             {/* VIEW C: LIVE CHAT WINDOW */}
             {activeSidebarTab === "messages" && (
               <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[520px] overflow-hidden shadow-xl animate-fade-in">
-                {selectedCase.red_flag ? (
+                {!selectedCase ? (
+                  <div className="flex-1 flex flex-col justify-center items-center text-center p-8 space-y-4">
+                    <MessageSquare className="w-12 h-12 text-zinc-700 mx-auto animate-pulse" />
+                    <h4 className="font-extrabold text-white text-base" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Secure Chat Room</h4>
+                    <p className="text-xs text-zinc-400 max-w-sm leading-relaxed">
+                      No active secure chat rooms. Select a program above to begin your clinical assessment.
+                    </p>
+                  </div>
+                ) : selectedCase.red_flag ? (
                   <div className="flex-1 flex flex-col justify-center items-center text-center p-8 space-y-4 bg-rose-500/[0.02]">
                     <ShieldAlert className="w-12 h-12 text-rose-500 animate-pulse" />
                     <h4 className="font-extrabold text-white text-base" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Secure Chat Disabled</h4>
@@ -527,198 +584,209 @@ export default function PatientPortal({
             {/* VIEW D: MEDICAL REPORTS & PRESCRIPTION SHEETS */}
             {activeSidebarTab === "reports" && (
               <div className="space-y-6 animate-fade-in">
-                
-                {/* Submitted Intake Answers Card */}
-                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
-                  <h4 className="text-xs font-extrabold text-zinc-500 uppercase tracking-widest font-mono border-b border-zinc-900 pb-2">
-                    Submitted Intake Questionnaire
-                  </h4>
-                  <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-                    {selectedCase.raw_answers.map((ans, i) => (
-                      <div key={i} className="text-xs border-b border-zinc-900 pb-2">
-                        <span className="text-zinc-500 block font-mono text-[10px]">{ans.question}</span>
-                        <span className="text-zinc-200 mt-0.5 block">{ans.answer}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Prescription sheet and official PDF card (if case closed) */}
-                {selectedCase.red_flag ? (
-                  <div className="p-8 bg-rose-500/5 border border-rose-500/15 rounded-2xl text-center space-y-3.5 animate-fade-in">
-                    <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto animate-pulse" />
-                    <h5 className="font-extrabold text-rose-400 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Online Prescription Locked</h5>
+                {!selectedCase ? (
+                  <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-8 text-center space-y-4 animate-fade-in">
+                    <FileText className="w-12 h-12 text-zinc-700 mx-auto" />
+                    <h4 className="text-sm font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>No Reports Available</h4>
                     <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
-                      Due to cardiovascular safety contraindications detected during clinical safety reviews, remote prescription issuance is strictly locked. Please visit a cardiologist or general hospital for physical assessment.
+                      Reports and digital prescriptions are issued after your clinical assessment. Select a program to begin.
                     </p>
-                  </div>
-                ) : selectedCase.status === "completed" ? (
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-6 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full filter blur-xl" />
-                    
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <h4 className="text-base font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                          <Compass className="w-5 h-5 text-emerald-400" /> Digital Evaluation & Prescription Sheet
-                        </h4>
-                        <p className="text-xs text-zinc-500 mt-1">MDCN Clinical Seal is verified and active. Cryptographic document compiled.</p>
-                      </div>
-
-                      {/* PDF Print CTA */}
-                      <button
-                        onClick={() => triggerDownloadPDF(selectedCase)}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-extrabold text-xs rounded-xl shadow-lg hover:brightness-110 transition-all flex items-center gap-1.5"
-                      >
-                        <FileDown className="w-4 h-4 text-black" /> Download PDF Prescription
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 font-bold block">Doctor Notes</label>
-                        <div className="text-xs text-zinc-300 leading-relaxed bg-black p-4 rounded-xl border border-zinc-900 min-h-[100px] max-h-[300px] overflow-y-auto space-y-1.5">
-                          {selectedCase.doctor_notes ? renderRichText(selectedCase.doctor_notes) : <p className="italic text-zinc-500">Your assessment is complete. Follow lifestyle remedies and pharmaceutical advice detailed in this panel.</p>}
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-mono tracking-widest text-[#E5C158] font-bold block">Issued Pharmaceutical Rx</label>
-                        <div className="text-xs font-mono text-white bg-black p-4 rounded-xl border border-zinc-900 leading-relaxed min-h-[100px] max-h-[300px] overflow-y-auto space-y-1 text-left">
-                          {selectedCase.prescription ? renderRichText(selectedCase.prescription) : "No active prescription required."}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Raise Dispute Box */}
-                    <div className="mt-6 pt-6 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-red-950/[0.02] p-4 rounded-xl border border-zinc-900/60">
-                      <div>
-                        <h5 className="font-bold text-zinc-300 text-xs">Dissatisfied with this clinical consultation?</h5>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">You can escalate this case file to administrative medical supervisors for a clinical review.</p>
-                      </div>
-                      
-                      {disputeSubmitted ? (
-                        <span className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-wider bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/15">
-                          Dispute Lodged / Pending Review
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setDisputeReason("");
-                            setDisputeError("");
-                            setOpenDisputeForm(true);
-                          }}
-                          className="px-4 py-2 border border-zinc-900 hover:border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs rounded-xl transition-all"
-                        >
-                          File Formal Dispute
-                        </button>
-                      )}
-                    </div>
-
-                    {openDisputeForm && (
-                      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-fade-in text-left">
-                          <div>
-                            <h4 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                              <ShieldAlert className="w-4 h-4 text-rose-500" /> Escalate Consultation Dispute
-                            </h4>
-                            <p className="text-xs text-zinc-400 mt-1">
-                              Briefly detail your clinical concerns or grievance. Admin supervisors will audit your intake, doctor transcripts, and prescription.
-                            </p>
-                          </div>
-
-                          {disputeError && (
-                            <p className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-[10px] text-rose-400 font-mono">
-                              {disputeError}
-                            </p>
-                          )}
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Dispute Reason Category</label>
-                            <select
-                              value={disputeCategory}
-                              onChange={(e) => setDisputeCategory(e.target.value)}
-                              className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
-                            >
-                              <option value="Incorrect prescription advice / dose discrepancy">Incorrect prescription advice / dose discrepancy</option>
-                              <option value="Doctor failed to answer medical inquiries fully">Doctor failed to answer medical inquiries fully</option>
-                              <option value="Poor clinical bedside manner / communication">Poor clinical bedside manner / communication</option>
-                              <option value="Clinical safety check bypass or incorrect diagnosis">Clinical safety check bypass or incorrect diagnosis</option>
-                              <option value="Administrative issue or system error">Administrative issue or system error</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Detailed Explanation (Mandatory)</label>
-                            <textarea
-                              required
-                              placeholder="Describe your grievance in detail..."
-                              value={disputeReason}
-                              onChange={(e) => setDisputeReason(e.target.value)}
-                              rows={4}
-                              className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
-                            />
-                          </div>
-
-                          <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/40">
-                            <button
-                              type="button"
-                              onClick={() => { setOpenDisputeForm(false); setDisputeError(""); }}
-                              className="px-3.5 py-1.5 border border-zinc-900 hover:border-zinc-850 text-zinc-400 hover:text-white rounded-lg text-xs font-bold transition-all"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!disputeReason.trim() || submittingDispute}
-                              onClick={async () => {
-                                setSubmittingDispute(true);
-                                setDisputeError("");
-                                try {
-                                  const response = await fetch("/api/data/disputes", {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                      "x-patient-phone": selectedCase.patient_phone || ""
-                                    },
-                                    body: JSON.stringify({
-                                      id: "disp_" + Math.random().toString(36).substr(2, 9),
-                                      consultation_id: selectedCase.id,
-                                      patient_phone: selectedCase.patient_phone,
-                                      reason: `${disputeCategory}: ${disputeReason}`,
-                                      status: "pending",
-                                      created_at: new Date().toISOString()
-                                    })
-                                  });
-                                  const resData = await response.json();
-                                  if (!response.ok) {
-                                    setDisputeError(resData.message || "Failed to lodge dispute. Please try again.");
-                                  } else {
-                                    setDisputeSubmitted(true);
-                                    setOpenDisputeForm(false);
-                                    alert("Dispute lodged successfully. Admin supervisors will audit your file.");
-                                  }
-                                } catch (err) {
-                                  setDisputeError("Failed to communicate with secure servers.");
-                                } finally {
-                                  setSubmittingDispute(false);
-                                }
-                              }}
-                              className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-extrabold rounded-lg text-xs transition-all animate-pulse"
-                            >
-                              {submittingDispute ? "Submitting..." : "Escalate Now"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  <div className="p-8 bg-zinc-950 rounded-2xl border border-dashed border-zinc-900 text-center space-y-2">
-                    <ShieldAlert className="w-8 h-8 text-zinc-700 mx-auto" />
-                    <h5 className="font-bold text-zinc-400 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Prescription sheet is not yet published</h5>
-                    <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                      Your consulting doctor has not closed your file. Active medical chat is active above. Once closed, your official signed Rx sheet will generate instantly.
-                    </p>
-                  </div>
+                  <>
+                    {/* Submitted Intake Answers Card */}
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
+                      <h4 className="text-xs font-extrabold text-zinc-500 uppercase tracking-widest font-mono border-b border-zinc-900 pb-2">
+                        Submitted Intake Questionnaire
+                      </h4>
+                      <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                        {selectedCase.raw_answers.map((ans, i) => (
+                          <div key={i} className="text-xs border-b border-zinc-900 pb-2">
+                            <span className="text-zinc-500 block font-mono text-[10px]">{ans.question}</span>
+                            <span className="text-zinc-200 mt-0.5 block">{ans.answer}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Prescription sheet and official PDF card (if case closed) */}
+                    {selectedCase.red_flag ? (
+                      <div className="p-8 bg-rose-500/5 border border-rose-500/15 rounded-2xl text-center space-y-3.5 animate-fade-in">
+                        <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto animate-pulse" />
+                        <h5 className="font-extrabold text-rose-400 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Online Prescription Locked</h5>
+                        <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
+                          Due to cardiovascular safety contraindications detected during clinical safety reviews, remote prescription issuance is strictly locked. Please visit a cardiologist or general hospital for physical assessment.
+                        </p>
+                      </div>
+                    ) : selectedCase.status === "completed" ? (
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full filter blur-xl" />
+                        
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <h4 className="text-base font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                              <Compass className="w-5 h-5 text-emerald-400" /> Digital Evaluation & Prescription Sheet
+                            </h4>
+                            <p className="text-xs text-zinc-500 mt-1">MDCN Clinical Seal is verified and active. Cryptographic document compiled.</p>
+                          </div>
+
+                          {/* PDF Print CTA */}
+                          <button
+                            onClick={() => triggerDownloadPDF(selectedCase)}
+                            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-extrabold text-xs rounded-xl shadow-lg hover:brightness-110 transition-all flex items-center gap-1.5"
+                          >
+                            <FileDown className="w-4 h-4 text-black" /> Download PDF Prescription
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 font-bold block">Doctor Notes</label>
+                            <div className="text-xs text-zinc-300 leading-relaxed bg-black p-4 rounded-xl border border-zinc-900 min-h-[100px] max-h-[300px] overflow-y-auto space-y-1.5">
+                              {selectedCase.doctor_notes ? renderRichText(selectedCase.doctor_notes) : <p className="italic text-zinc-500">Your assessment is complete. Follow lifestyle remedies and pharmaceutical advice detailed in this panel.</p>}
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-mono tracking-widest text-[#E5C158] font-bold block">Issued Pharmaceutical Rx</label>
+                            <div className="text-xs font-mono text-white bg-black p-4 rounded-xl border border-zinc-900 leading-relaxed min-h-[100px] max-h-[300px] overflow-y-auto space-y-1 text-left">
+                              {selectedCase.prescription ? renderRichText(selectedCase.prescription) : "No active prescription required."}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Raise Dispute Box */}
+                        <div className="mt-6 pt-6 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-red-950/[0.02] p-4 rounded-xl border border-zinc-900/60">
+                          <div>
+                            <h5 className="font-bold text-zinc-300 text-xs">Dissatisfied with this clinical consultation?</h5>
+                            <p className="text-[11px] text-zinc-500 mt-0.5">You can escalate this case file to administrative medical supervisors for a clinical review.</p>
+                          </div>
+                          
+                          {disputeSubmitted ? (
+                            <span className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-wider bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/15">
+                              Dispute Lodged / Pending Review
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setDisputeReason("");
+                                setDisputeError("");
+                                setOpenDisputeForm(true);
+                              }}
+                              className="px-4 py-2 border border-zinc-900 hover:border-zinc-800 text-zinc-400 hover:text-white font-bold text-xs rounded-xl transition-all"
+                            >
+                              File Formal Dispute
+                            </button>
+                          )}
+                        </div>
+
+                        {openDisputeForm && (
+                          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-fade-in text-left">
+                              <div>
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                                  <ShieldAlert className="w-4 h-4 text-rose-500" /> Escalate Consultation Dispute
+                                </h4>
+                                <p className="text-xs text-zinc-400 mt-1">
+                                  Briefly detail your clinical concerns or grievance. Admin supervisors will audit your intake, doctor transcripts, and prescription.
+                                </p>
+                              </div>
+
+                              {disputeError && (
+                                <p className="p-3 bg-rose-950/20 border border-rose-900/30 rounded-xl text-[10px] text-rose-400 font-mono">
+                                  {disputeError}
+                                </p>
+                              )}
+
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Dispute Reason Category</label>
+                                <select
+                                  value={disputeCategory}
+                                  onChange={(e) => setDisputeCategory(e.target.value)}
+                                  className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                                >
+                                  <option value="Incorrect prescription advice / dose discrepancy">Incorrect prescription advice / dose discrepancy</option>
+                                  <option value="Doctor failed to answer medical inquiries fully">Doctor failed to answer medical inquiries fully</option>
+                                  <option value="Poor clinical bedside manner / communication">Poor clinical bedside manner / communication</option>
+                                  <option value="Clinical safety check bypass or incorrect diagnosis">Clinical safety check bypass or incorrect diagnosis</option>
+                                  <option value="Administrative issue or system error">Administrative issue or system error</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] uppercase font-mono text-zinc-400 block font-bold">Detailed Explanation (Mandatory)</label>
+                                <textarea
+                                  required
+                                  placeholder="Describe your grievance in detail..."
+                                  value={disputeReason}
+                                  onChange={(e) => setDisputeReason(e.target.value)}
+                                  rows={4}
+                                  className="w-full bg-black border border-zinc-900 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                                />
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/40">
+                                <button
+                                  type="button"
+                                  onClick={() => { setOpenDisputeForm(false); setDisputeError(""); }}
+                                  className="px-3.5 py-1.5 border border-zinc-900 hover:border-zinc-850 text-zinc-400 hover:text-white rounded-lg text-xs font-bold transition-all"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!disputeReason.trim() || submittingDispute}
+                                  onClick={async () => {
+                                    setSubmittingDispute(true);
+                                    setDisputeError("");
+                                    try {
+                                      const response = await fetch("/api/data/disputes", {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                          "x-patient-phone": selectedCase.patient_phone || ""
+                                        },
+                                        body: JSON.stringify({
+                                          id: "disp_" + Math.random().toString(36).substr(2, 9),
+                                          consultation_id: selectedCase.id,
+                                          patient_phone: selectedCase.patient_phone,
+                                          reason: `${disputeCategory}: ${disputeReason}`,
+                                          status: "pending",
+                                          created_at: new Date().toISOString()
+                                        })
+                                      });
+                                      const resData = await response.json();
+                                      if (!response.ok) {
+                                        setDisputeError(resData.message || "Failed to lodge dispute. Please try again.");
+                                      } else {
+                                        setDisputeSubmitted(true);
+                                        setOpenDisputeForm(false);
+                                        alert("Dispute lodged successfully. Admin supervisors will audit your file.");
+                                      }
+                                    } catch (err) {
+                                      setDisputeError("Failed to communicate with secure servers.");
+                                    } finally {
+                                      setSubmittingDispute(false);
+                                    }
+                                  }}
+                                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-extrabold rounded-lg text-xs transition-all animate-pulse"
+                                >
+                                  {submittingDispute ? "Submitting..." : "Escalate Now"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-8 bg-zinc-950 rounded-2xl border border-dashed border-zinc-900 text-center space-y-2">
+                        <ShieldAlert className="w-8 h-8 text-zinc-700 mx-auto" />
+                        <h5 className="font-bold text-zinc-400 text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Prescription sheet is not yet published</h5>
+                        <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                          Your consulting doctor has not closed your file. Active medical chat is active above. Once closed, your official signed Rx sheet will generate instantly.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

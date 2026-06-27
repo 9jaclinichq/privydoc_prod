@@ -436,7 +436,8 @@ export const consultationApi = {
   },
 
   getByPatientPhone: (phone: string): Consultation[] => {
-    return consultationApi.getAll().filter(c => c.patient_phone === phone);
+    const target = normPhone(phone);
+    return consultationApi.getAll().filter(c => normPhone(c.patient_phone) === target);
   },
 
   getByDoctorId: (docId: string): Consultation[] => {

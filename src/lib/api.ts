@@ -2,7 +2,7 @@ import { Doctor, Patient, Consultation, ChatMessage, PayoutRequest, PricingConfi
 import { DEMO_DOCTORS, DEMO_CONSULTATIONS } from "../data";
 import { generateId } from "../utils";
 import { getStageLabel } from "../lifecycle";
-import { sha256 } from "../utils/clinical";
+import { sha256, normPhone } from "../utils/clinical";
 
 import { DATA } from "../services/data";
 
@@ -1597,7 +1597,8 @@ export const patientApi = {
       console.error("Patient API login fetch failed, falling back:", e);
       const patients = patientApi.getAll();
       const hashedPin = sha256(pin);
-      const patient = patients.find(p => p.phone === phone && (p.pin_hash === pin || p.pin_hash === hashedPin));
+      const normalizedPhone = normPhone(phone);
+      const patient = patients.find(p => p.phone === normalizedPhone && (p.pin_hash === pin || p.pin_hash === hashedPin));
       if (!patient) {
         return { success: false, error: "Invalid phone number or secure 6-digit PIN." };
       }

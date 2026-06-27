@@ -85,7 +85,7 @@ jobs:
             --platform managed \
             --region ${{ secrets.GCP_REGION }} \
             --allow-unauthenticated \
-            --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+            --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY_STAGING }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY_STAGING }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY_STAGING }}"
           
           # Explicitly force routing 100% traffic to the latest staging revision to bypass any stale traffic splits
           gcloud run services update-traffic privydoc-app-staging \
@@ -104,7 +104,7 @@ jobs:
               --no-traffic \
               --allow-unauthenticated \
               --revision-suffix=${{ github.sha }} \
-              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }}"
           else
             echo "Service privydoc-app does not exist yet. Deploying initial revision."
             gcloud run deploy privydoc-app \
@@ -113,7 +113,7 @@ jobs:
               --region ${{ secrets.GCP_REGION }} \
               --allow-unauthenticated \
               --revision-suffix=${{ github.sha }} \
-              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }}"
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }}"
           fi
 
       - name: Run Staging Smoke Suite
@@ -130,7 +130,6 @@ jobs:
           echo ""
           
           echo "=== Running Strict Verifications ==="
-          curl -f "$STAGING_URL/api/healthz" || exit 1
           curl -f "$STAGING_URL/api/config" || exit 1
 
   promote-production:

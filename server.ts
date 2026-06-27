@@ -652,7 +652,6 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
 
     // D. Persist hashed OTP code to Supabase, fallback to memory if offline/dev
     let savedToDb = false;
-    const otpId = "otp_" + Math.random().toString(36).substr(2, 9);
     
     if (supabaseUrl && supabaseServiceKey) {
       try {
@@ -664,7 +663,6 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            id: otpId,
             phone: sanitizedPhone,
             code_hash,
             expires_at,
@@ -886,8 +884,8 @@ app.post("/api/otp/verify", rateLimiter("otpVerify", 10, 1 * 60 * 1000, "Too man
     }
 
     // Mark code as used
-    if (verifiedViaDb && otpRecord.id) {
-      await fetch(`${supabaseUrl}/rest/v1/otp_codes?id=eq.${otpRecord.id}`, {
+    if (verifiedViaDb) {
+      await fetch(`${supabaseUrl}/rest/v1/otp_codes?phone=eq.${sanitizedPhone}&code_hash=eq.${hashedInput}`, {
         method: "PATCH",
         headers: {
           apikey: supabaseServiceKey,

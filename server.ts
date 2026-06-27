@@ -756,7 +756,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
             to: sanitizedPhone,
             type: "template",
             template: {
-              name: "privydoc-otp",
+              name: "privydoc_otp",
               language: {
                 code: "en"
               },

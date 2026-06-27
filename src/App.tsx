@@ -16,6 +16,15 @@ import { validateTemplatePlaceholders } from "./templates";
 const ClinicianArea = React.lazy(() => import("./components/ClinicianArea"));
 const AdminOffice = React.lazy(() => import("./components/AdminOffice"));
 
+function normPhone(phone: string): string {
+  if (!phone) return "";
+  let sanitized = phone.replace(/[\s\-\(\)\+]/g, "");
+  if (sanitized.startsWith("0")) sanitized = "234" + sanitized.slice(1);
+  if (sanitized.startsWith("2340")) sanitized = "234" + sanitized.slice(4);
+  if (sanitized.length === 10 && /^[789]\d{9}$/.test(sanitized)) sanitized = "234" + sanitized;
+  return sanitized;
+}
+
 export default function App() {
   // Navigation / Role selection states
   const [activeTab, setActiveTab] = useState<"patient" | "clinician" | "admin">("patient");
@@ -835,7 +844,7 @@ export default function App() {
       const response = await fetch("/api/auth/patient/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: patientSession?.phone, pin: unlockPin })
+        body: JSON.stringify({ phone: normPhone(patientSession?.phone || ""), pin: unlockPin })
       });
       const data = await response.json();
       if (response.ok && (data.success || data.ok)) {

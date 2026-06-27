@@ -1597,8 +1597,7 @@ export const patientApi = {
       console.error("Patient API login fetch failed, falling back:", e);
       const patients = patientApi.getAll();
       const hashedPin = sha256(pin);
-      const normalizedPhone = normPhone(phone);
-      const patient = patients.find(p => p.phone === normalizedPhone && (p.pin_hash === pin || p.pin_hash === hashedPin));
+      const patient = patients.find(p => p.phone === normPhone(phone) && (p.pin_hash === pin || p.pin_hash === hashedPin));
       if (!patient) {
         return { success: false, error: "Invalid phone number or secure 6-digit PIN." };
       }

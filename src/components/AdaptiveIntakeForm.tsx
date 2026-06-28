@@ -229,28 +229,28 @@ export default function AdaptiveIntakeForm({
     : 0;
 
   return (
-    <div className="w-full max-w-[480px] mx-auto bg-neutral-950/40 backdrop-blur-md rounded-2xl border border-neutral-800/60 p-6 flex flex-col justify-between min-h-[500px]" id="adaptive-intake-form-wrapper">
+    <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col justify-between min-h-[calc(100vh-140px)] md:min-h-0 md:h-auto pb-24 md:pb-6" id="adaptive-intake-form-wrapper">
       
       {/* Progress & Header */}
-      <div className="mb-6" id="intake-header-progress">
+      <div className="mb-6 animate-fade-in relative z-10" id="intake-header-progress">
         <div className="flex justify-between items-center text-xs font-mono text-neutral-400 mb-2">
           <span>
             {phase === 2 ? "Phase 2 — " : ""}Question {currentIndex + 1} of {activeQuestions.length}
           </span>
           <span>{progressPercent}%</span>
         </div>
-        <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+        <div className="w-full bg-neutral-800/80 h-2 rounded-full overflow-hidden relative z-10 shadow-inner">
           <div
-            className="bg-[#C9A84C] h-full transition-all duration-300 ease-out"
+            className="bg-[#C9A84C] h-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(201,168,76,0.5)]"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       </div>
 
       {/* Main Slide Card Area */}
-      <div className="flex-1 overflow-hidden relative mb-6 min-h-[340px]" id="intake-card-viewport">
+      <div className="overflow-hidden relative mb-6 min-h-[220px] md:min-h-[180px] h-auto" id="intake-card-viewport">
         <div
-          className="flex transition-transform duration-300 ease-out h-full items-stretch"
+          className="flex transition-transform duration-300 ease-out h-auto items-start"
           style={{ transform: `translateX(-${currentIndex * (100 / (activeQuestions.length || 1))}%)`, width: `${activeQuestions.length * 100}%` }}
         >
           {activeQuestions.map((q, idx) => {
@@ -488,15 +488,18 @@ export default function AdaptiveIntakeForm({
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between items-center gap-4 border-t border-neutral-900 pt-4" id="intake-navigation-controls">
+      <div 
+        className="flex justify-between items-center gap-4 border-t border-neutral-800/40 pt-4 bg-neutral-950/95 backdrop-blur-md px-4 pb-5 pt-4 fixed bottom-0 left-0 right-0 z-30 md:static md:p-0 md:bg-transparent md:border-none md:pt-0 md:z-auto" 
+        id="intake-navigation-controls"
+      >
         <button
           type="button"
           onClick={handleBack}
           disabled={currentIndex === 0}
-          className={`flex items-center gap-1.5 text-xs font-mono px-3 py-2 rounded-lg transition-all ${
+          className={`flex items-center gap-1.5 text-xs font-mono px-3 py-2.5 md:py-2 rounded-lg transition-all ${
             currentIndex === 0
               ? "text-neutral-600 cursor-not-allowed"
-              : "text-neutral-400 hover:text-white hover:bg-neutral-900"
+              : "text-neutral-400 hover:text-white hover:bg-neutral-900/50"
           }`}
         >
           <ChevronLeft className="w-4 h-4" />
@@ -507,7 +510,7 @@ export default function AdaptiveIntakeForm({
           type="button"
           onClick={handleNext}
           disabled={!isCurrentAnswerValid()}
-          className="flex items-center gap-1.5 bg-[#C9A84C] text-black hover:bg-[#b0913e] px-5 py-2.5 rounded-xl text-sm font-medium font-mono tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 bg-[#C9A84C] text-black hover:bg-[#b0913e] px-5 py-2.5 md:py-2.5 rounded-xl text-sm font-medium font-mono tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span>{currentIndex === activeQuestions.length - 1 ? "Submit" : "Next"}</span>
           <ChevronRight className="w-4 h-4" />

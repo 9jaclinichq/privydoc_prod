@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, Check, ChevronUp, ChevronDown } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, BellOff, MapPin, Check, ChevronUp, ChevronDown } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -100,6 +100,7 @@ export default function App() {
   // PWA deferredPrompt and showPwaBanner states
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
+  const [showNotifInstructions, setShowNotifInstructions] = useState(false);
 
   // Clinician states
   const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(() => {
@@ -352,6 +353,50 @@ export default function App() {
     localStorage.setItem("privydoc_pwa_dismissed", Date.now().toString());
     setShowPwaBanner(false);
   };
+
+  const handleNotifDismiss = () => {
+    localStorage.setItem("privydoc_notif_deferred", Date.now().toString());
+    const countStr = localStorage.getItem("privydoc_notif_dismiss_count");
+    const count = countStr ? parseInt(countStr, 10) : 0;
+    localStorage.setItem("privydoc_notif_dismiss_count", (count + 1).toString());
+    setPermissionModal(null);
+    setShowNotifInstructions(false);
+  };
+
+  // Browser Notification Trigger Logic
+  useEffect(() => {
+    if (patientSubView === "portal" && patientSession && !isPatientSessionLocked) {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        // If granted, do nothing
+        if (Notification.permission === "granted") return;
+
+        // Check deferral / dismissal count
+        const dismissedTimeStr = localStorage.getItem("privydoc_notif_deferred");
+        const dismissCountStr = localStorage.getItem("privydoc_notif_dismiss_count");
+        const dismissCount = dismissCountStr ? parseInt(dismissCountStr, 10) : 0;
+
+        // After 3 dismissals, stop asking permanently.
+        if (dismissCount >= 3) return;
+
+        if (dismissedTimeStr) {
+          const dismissedTime = parseInt(dismissedTimeStr, 10);
+          const now = Date.now();
+          const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+          const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+          if (dismissCount === 1 && now - dismissedTime < threeDaysMs) {
+            return;
+          }
+          if (dismissCount === 2 && now - dismissedTime < sevenDaysMs) {
+            return;
+          }
+        }
+
+        // Trigger the modal!
+        setPermissionModal("notifications");
+      }
+    }
+  }, [patientSubView, patientSession, isPatientSessionLocked]);
 
   // Inactivity / Background TTL Lock (30 minutes)
   useEffect(() => {
@@ -884,9 +929,6 @@ export default function App() {
           setSelectedCase(null);
         }
         setPatientSubView("portal");
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-          setPermissionModal("notifications");
-        }
       }
     } else {
       alert(res.error || "Failed to establish secure patient profile.");
@@ -917,9 +959,6 @@ export default function App() {
           setSelectedCase(null);
         }
         setPatientSubView("portal");
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
-          setPermissionModal("notifications");
-        }
       }
     } else {
       alert(res.error || "PIN authentication rejected.");
@@ -2259,53 +2298,131 @@ export default function App() {
                 </button>
               </div>
             </>
-          ) : (
-            <>
-              <div className="text-center space-y-3">
-                <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                  <Bell className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  SECURE MEDICAL ALERT SYSTEM
-                </h3>
-                <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
-                  Encrypted Push Channel
-                </span>
-                <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                  To maintain standard asynchronous clinic hours without delay, PrivyDoc utilizes secure instant alerts to notify you the moment your certified doctor:
-                </p>
-                <div className="text-left bg-black/40 border border-zinc-900 rounded-xl p-3 space-y-1.5 text-[10.5px] text-zinc-400">
-                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Claims your diagnostic folder file</p>
-                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Asks vital follow-up screening questions</p>
-                  <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Issues signed pharmacotherapy prescriptions</p>
-                </div>
-              </div>
+          ) : (() => {
+            const isNotifDenied = typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied";
+            if (isNotifDenied) {
+              return (
+                <>
+                  <div className="text-center space-y-3">
+                    <div className="w-14 h-14 bg-red-500/10 text-red-400 border border-red-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-red-500/5 animate-pulse">
+                      <BellOff className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      ENABLE NOTIFICATIONS
+                    </h3>
+                    <span className="inline-block px-2.5 py-0.5 bg-red-500/5 text-red-400 text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-red-500/10">
+                      Settings Config Required
+                    </span>
+                    <p className="text-xs text-zinc-300 leading-relaxed font-sans pt-1">
+                      To receive case updates, enable notifications for PrivyDoc in your browser settings.
+                    </p>
 
-              <div className="space-y-3 pt-2">
-                <button
-                  onClick={() => {
-                    if ("Notification" in window) {
-                      Notification.requestPermission().then((permission) => {
-                        console.log("Notification permission:", permission);
+                    {showNotifInstructions && (
+                      <div className="text-left bg-black/50 border border-zinc-900 rounded-2xl p-4.5 space-y-4 text-xs text-zinc-400 mt-4 max-h-[220px] overflow-y-auto">
+                        <div className="space-y-1.5">
+                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Google Chrome / Android</p>
+                          <p className="pl-1.5 border-l border-zinc-800">Tap the Lock icon next to the URL, select <strong className="text-zinc-300">Permissions</strong> or <strong className="text-zinc-300">Site settings</strong>, and change Notifications to <strong className="text-[#d4af37]">Allow</strong>.</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Apple Safari / iOS</p>
+                          <p className="pl-1.5 border-l border-zinc-800">Add PrivyDoc to your Home Screen first. Then open your device <strong className="text-zinc-300">Settings &gt; Notifications &gt; PrivyDoc</strong>, and toggle <strong className="text-[#d4af37]">Allow Notifications</strong> on.</p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Mozilla Firefox</p>
+                          <p className="pl-1.5 border-l border-zinc-800">Click the permissions Shield icon to the left of the address bar, clear any blocked status, and reload the page.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    {!showNotifInstructions ? (
+                      <>
+                        <button
+                          onClick={() => setShowNotifInstructions(true)}
+                          className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                        >
+                          Show Me How <Info className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={handleNotifDismiss}
+                          className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                        >
+                          Maybe Later
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setPermissionModal(null);
+                            setShowNotifInstructions(false);
+                          }}
+                          className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                        >
+                          Done <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setShowNotifInstructions(false)}
+                          className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                        >
+                          Back
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              );
+            }
+
+            return (
+              <>
+                <div className="text-center space-y-3">
+                  <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
+                    <Bell className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    SECURE MEDICAL ALERT SYSTEM
+                  </h3>
+                  <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
+                    Encrypted Push Channel
+                  </span>
+                  <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
+                    Get instant alerts when your doctor responds to your case — usually within 24 hours.
+                  </p>
+                  <div className="text-left bg-black/40 border border-zinc-900 rounded-xl p-3 space-y-1.5 text-[10.5px] text-zinc-400">
+                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Claims your diagnostic folder file</p>
+                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Asks vital follow-up screening questions</p>
+                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Issues signed pharmacotherapy prescriptions</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <button
+                    onClick={() => {
+                      if ("Notification" in window) {
+                        Notification.requestPermission().then((permission) => {
+                          console.log("Notification permission:", permission);
+                          setPermissionModal(null);
+                        });
+                      } else {
                         setPermissionModal(null);
-                      });
-                    } else {
-                      setPermissionModal(null);
-                    }
-                  }}
-                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
-                >
-                  Enable Real-Time Alerts <Check className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPermissionModal(null)}
-                  className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
-                >
-                  Dismiss for Now
-                </button>
-              </div>
-            </>
-          )}
+                      }
+                    }}
+                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                  >
+                    Enable Alerts <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleNotifDismiss}
+                    className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                  >
+                    Maybe Later
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     )}

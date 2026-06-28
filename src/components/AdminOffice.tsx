@@ -6,6 +6,7 @@ import {
   Megaphone, Send, RefreshCw
 } from "lucide-react";
 import { doctorApi, adminApi, pricingApi, consultationApi } from "../lib/api";
+import { toast } from "./ToastNotification";
 
 interface AdminOfficeProps {
   adminPin: string;
@@ -1599,7 +1600,7 @@ export default function AdminOffice({
 
                               setResolvingDisputeId(null);
                               fetchDisputesAndConsultations();
-                              alert("Dispute marked resolved and audit log registered successfully.");
+                              toast.success("Dispute marked resolved and audit log registered successfully.");
                             }
                           } catch (err) {
                             setResolvingError("Could not establish connection with secure servers.");

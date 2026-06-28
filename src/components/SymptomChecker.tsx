@@ -3,6 +3,7 @@ import { Activity, Sparkles, HelpCircle, ArrowLeft, HeartPulse } from "lucide-re
 import { INTAKE_QUESTIONS, SYMPTOM_ADVICE } from "../data";
 import { formatNaira } from "../utils";
 import { pricingApi } from "../lib/api";
+import { toast } from "./ToastNotification";
 
 interface SymptomCheckerProps {
   selectedCondition: any;
@@ -86,7 +87,7 @@ export default function SymptomChecker({
             <button
               onClick={() => {
                 if (!isAllAnswered && categoryQuestions.length > 0) {
-                  alert("Please provide responses for all quick evaluation statements.");
+                  toast.warning("Please provide responses for all quick evaluation statements.");
                   return;
                 }
                 setShowAdvice(true);

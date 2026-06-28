@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Consultation } from "../types";
 import { renderRichText } from "../utils";
+import { toast } from "./ToastNotification";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
 
@@ -88,7 +89,7 @@ export default function PatientPortal({
       await generateConsultationPDF(con);
     } catch (e) {
       console.error("Failed to generate PDF:", e);
-      alert("Unable to compile report PDF in browser environment. Please review clinical notes inside the portal tab.");
+      toast.error("Unable to compile report PDF in browser environment. Please review clinical notes inside the portal tab.");
     }
   };
 
@@ -760,7 +761,7 @@ export default function PatientPortal({
                                       } else {
                                         setDisputeSubmitted(true);
                                         setOpenDisputeForm(false);
-                                        alert("Dispute lodged successfully. Admin supervisors will audit your file.");
+                                        toast.success("Dispute lodged successfully. Admin supervisors will audit your file.");
                                       }
                                     } catch (err) {
                                       setDisputeError("Failed to communicate with secure servers.");

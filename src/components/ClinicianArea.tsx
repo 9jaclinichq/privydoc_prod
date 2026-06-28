@@ -10,6 +10,8 @@ import { renderRichText } from "../utils";
 import { getStageTitle, getSLAHours, ConsultationStage } from "../lifecycle";
 import { getTemplates, saveCustomTemplate, deleteCustomTemplate, validateTemplatePlaceholders, ResponseTemplate } from "../templates";
 import { generateConsultationPDF } from "../utils/pdfGenerator";
+import { toast } from "./ToastNotification";
+import { confirm } from "./ConfirmModal";
 
 interface ClinicianAreaProps {
   currentDoctor: Doctor | null;
@@ -294,7 +296,7 @@ export default function ClinicianArea({
       const updated = consultationApi.getById(selectedDoctorCase.id);
       if (updated) setSelectedDoctorCase(updated);
       triggerRefresh();
-      alert("Day-2 Follow-up check-in sent successfully to the patient!");
+      toast.success("Day-2 Follow-up check-in sent successfully to the patient!");
     }
   };
 
@@ -305,14 +307,14 @@ export default function ClinicianArea({
       const updated = consultationApi.getById(selectedDoctorCase.id);
       if (updated) setSelectedDoctorCase(updated);
       triggerRefresh();
-      alert("Case progressed to Day-5 clinical evaluation!");
+      toast.success("Case progressed to Day-5 clinical evaluation!");
     }
   };
 
   const handleLocalResolveReview = () => {
     if (!selectedDoctorCase) return;
     if (!closingNotes.trim()) {
-      alert("Please provide clinical review notes to resolve the review.");
+      toast.warning("Please provide clinical review notes to resolve the review.");
       return;
     }
 
@@ -320,7 +322,7 @@ export default function ClinicianArea({
     const prescriptionValidation = validateTemplatePlaceholders(closingPrescription);
     if (!notesValidation.ok || !prescriptionValidation.ok) {
       const allPlaceholders = Array.from(new Set([...notesValidation.tokens, ...prescriptionValidation.tokens]));
-      alert(`Submission Blocked: Clinical notes or prescription contain 5 or more unedited placeholder tokens. Please customize these prior to resolving:\n\n${allPlaceholders.join(", ")}`);
+      toast.error(`Submission Blocked: Clinical notes or prescription contain 5 or more unedited placeholder tokens. Please customize these prior to resolving:\n\n${allPlaceholders.join(", ")}`);
       return;
     }
 
@@ -331,14 +333,14 @@ export default function ClinicianArea({
       const updated = consultationApi.getById(selectedDoctorCase.id);
       if (updated) setSelectedDoctorCase(updated);
       triggerRefresh();
-      alert("Review resolved! Updated clinical directives and prescription archived.");
+      toast.success("Review resolved! Updated clinical directives and prescription archived.");
     }
   };
 
   const handleSaveCustomTemplate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customTemplateTitle.trim() || !customTemplateContent.trim()) {
-      alert("Please enter a title and text content for your custom template.");
+      toast.warning("Please enter a title and text content for your custom template.");
       return;
     }
     saveCustomTemplate({
@@ -351,11 +353,11 @@ export default function ClinicianArea({
     setCustomTemplateContent("");
     setShowCustomTemplateForm(false);
     setRefreshTemplatesCounter(prev => prev + 1);
-    alert("Custom clinical template saved successfully!");
+    toast.success("Custom clinical template saved successfully!");
   };
 
-  const handleDeleteCustomTemplate = (id: string) => {
-    if (confirm("Are you sure you want to permanently delete this custom clinical template?")) {
+  const handleDeleteCustomTemplate = async (id: string) => {
+    if (await confirm("Are you sure you want to permanently delete this custom clinical template?")) {
       deleteCustomTemplate(id);
       setRefreshTemplatesCounter(prev => prev + 1);
     }
@@ -364,7 +366,7 @@ export default function ClinicianArea({
   const handleCreateReferral = async () => {
     if (!selectedDoctorCase) return;
     if (!referralNotes.trim()) {
-      alert("Please fill in specific physical findings and referral notes.");
+      toast.warning("Please fill in specific physical findings and referral notes.");
       return;
     }
 
@@ -399,9 +401,9 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
       }
       triggerRefresh();
       setReferralModalOpen(false);
-      alert("Specialist clinical referral letter has been compiled, saved, and downloaded successfully!");
+      toast.success("Specialist clinical referral letter has been compiled, saved, and downloaded successfully!");
     } else {
-      alert("Unable to save referral record.");
+      toast.error("Unable to save referral record.");
     }
   };
 
@@ -1493,13 +1495,13 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                                                   const activeStage = selectedDoctorCase.stage || "initial";
                                                   if (activeStage === "initial" || activeStage === "day2_pending" || activeStage === "day2_sent") {
                                                     setDoctorMessage(textToApply);
-                                                    alert(`Applied template to dialogue reply box! Please customize all placeholder tokens.`);
+                                                    toast.info(`Applied template to dialogue reply box! Please customize all placeholder tokens.`);
                                                   } else if (activeStage === "day5_pending" || activeStage === "review_open") {
                                                     setClosingNotes(textToApply);
                                                     if (tpl.content.toLowerCase().includes("prescription") || tpl.content.toLowerCase().includes("rx:")) {
                                                       setClosingPrescription("Sildenafil 50mg Tablets, Tab 1 on demand prior to sexual activity. Dosing max once per 24 hours.");
                                                     }
-                                                    alert(`Applied template to notes field! Please customize prior to certification.`);
+                                                    toast.info(`Applied template to notes field! Please customize prior to certification.`);
                                                   }
                                                 }}
                                                 className="px-2 py-1 bg-emerald-600/10 border border-emerald-500/20 hover:bg-emerald-600/20 text-emerald-400 text-[9px] font-bold rounded-lg transition-all"

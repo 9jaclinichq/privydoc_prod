@@ -12,6 +12,8 @@ import SymptomChecker from "./components/SymptomChecker";
 import IntakeForm from "./components/IntakeForm";
 import PatientPortal from "./components/PatientPortal";
 import { validateTemplatePlaceholders } from "./templates";
+import { ToastContainer, toast } from "./components/ToastNotification";
+import { ConfirmModal } from "./components/ConfirmModal";
 
 const ClinicianArea = React.lazy(() => import("./components/ClinicianArea"));
 const AdminOffice = React.lazy(() => import("./components/AdminOffice"));
@@ -568,7 +570,7 @@ export default function App() {
       // If not logged in, route to register or login first!
       setRegPhone(searchPhone);
       setPatientSubView("register");
-      alert("Please establish or unlock your secure patient vault first to initiate a confidential clinical intake.");
+      toast.warning("Please establish or unlock your secure patient vault first to initiate a confidential clinical intake.");
     }
   };
 
@@ -625,11 +627,11 @@ export default function App() {
           setSelectedCase(data.consultation);
           triggerRefresh();
         } else {
-          alert(data.message || "Bypass verification failed.");
+          toast.error(data.message || "Bypass verification failed.");
         }
       } catch (e: any) {
         console.error(e);
-        alert("Bypass error: " + (e.message || "Unknown error"));
+        toast.error("Bypass error: " + (e.message || "Unknown error"));
       } finally {
         setIsSubmittingIntake(false);
       }
@@ -724,11 +726,11 @@ export default function App() {
               setSelectedCase(data.consultation);
               triggerRefresh();
             } else {
-              alert(data.message || "Payment verification failed.");
+              toast.error(data.message || "Payment verification failed.");
             }
           } catch (e: any) {
             console.error(e);
-            alert(e.message || "We encountered an issue verifying your payment. Please contact help@privydoc.com.ng");
+            toast.error(e.message || "We encountered an issue verifying your payment. Please contact help@privydoc.com.ng");
           } finally {
             setIsSubmittingIntake(false);
           }
@@ -777,11 +779,11 @@ export default function App() {
           setSelectedCase(data.consultation);
           triggerRefresh();
         } else {
-          alert(data.message || "Payment verification failed.");
+          toast.error(data.message || "Payment verification failed.");
         }
       } catch (e: any) {
         console.error(e);
-        alert("Verification server offline. Please try again.");
+        toast.error("Verification server offline. Please try again.");
       } finally {
         setIsSubmittingIntake(false);
       }
@@ -832,14 +834,14 @@ export default function App() {
   const handlePatientRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName || !regPhone || !regAge || !regState || !regConsent) {
-      alert("Please fill in all clinical registration details and accept the patient consent.");
+      toast.warning("Please fill in all clinical registration details and accept the patient consent.");
       return;
     }
 
     // Validate Name
     const nameTrimmed = regName.trim();
     if (!nameTrimmed.includes(" ") || nameTrimmed.split(/\s+/).length < 2) {
-      alert("Please enter both your first name and last name for clinical prescription eligibility.");
+      toast.warning("Please enter both your first name and last name for clinical prescription eligibility.");
       return;
     }
 
@@ -847,13 +849,13 @@ export default function App() {
     const cleanedPhone = regPhone.replace(/[\s\-\(\)]/g, "");
     const phoneRegex = /^(\+?234|0)[789][01]\d{8}$/;
     if (!phoneRegex.test(cleanedPhone)) {
-      alert("Invalid phone format. Please enter a valid Nigerian WhatsApp number (e.g., +234 803 123 4567 or 08031234567).");
+      toast.warning("Invalid phone format. Please enter a valid Nigerian WhatsApp number (e.g., +234 803 123 4567 or 08031234567).");
       return;
     }
 
     const ageNum = parseInt(regAge);
     if (isNaN(ageNum) || ageNum < 18) {
-      alert("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
+      toast.error("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
       return;
     }
 
@@ -863,12 +865,12 @@ export default function App() {
     if (res.success) {
       setPatientSubView("otp");
       if (res.test_bypass) {
-        alert(`Secure OTP Tunnel: A real OTP was generated for +${cleanedPhone}. For preview purposes, the code is '${res.test_bypass}'.`);
+        toast.info(`Secure OTP Tunnel: A real OTP was generated for +${cleanedPhone}. For preview purposes, the code is '${res.test_bypass}'.`);
       } else {
-        alert("A secure verification code has been sent to your WhatsApp number. Please check your messages.");
+        toast.success("A secure verification code has been sent to your WhatsApp number. Please check your messages.");
       }
     } else {
-      alert(res.error || "Failed to dispatch verification code.");
+      toast.error(res.error || "Failed to dispatch verification code.");
     }
   };
 
@@ -879,7 +881,7 @@ export default function App() {
     if (res.success) {
       setPatientSubView("pinSetup");
     } else {
-      alert(res.error || "Incorrect or expired verification code.");
+      toast.error(res.error || "Incorrect or expired verification code.");
     }
   };
 
@@ -887,11 +889,11 @@ export default function App() {
   const handlePatientPinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (regPin.length !== 6 || isNaN(parseInt(regPin))) {
-      alert("PIN must be exactly 6 numeric digits.");
+      toast.warning("PIN must be exactly 6 numeric digits.");
       return;
     }
     if (regPin !== regPinConfirm) {
-      alert("PIN confirmation does not match.");
+      toast.error("PIN confirmation does not match.");
       return;
     }
 
@@ -931,7 +933,7 @@ export default function App() {
         setPatientSubView("portal");
       }
     } else {
-      alert(res.error || "Failed to establish secure patient profile.");
+      toast.error(res.error || "Failed to establish secure patient profile.");
     }
   };
 
@@ -961,7 +963,7 @@ export default function App() {
         setPatientSubView("portal");
       }
     } else {
-      alert(res.error || "PIN authentication rejected.");
+      toast.error(res.error || "PIN authentication rejected.");
     }
   };
 
@@ -969,7 +971,7 @@ export default function App() {
   const handlePatientForgotSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientForgotPhone) {
-      alert("Registered phone number is required.");
+      toast.warning("Registered phone number is required.");
       return;
     }
     setIsPatientForgotSending(true);
@@ -978,7 +980,7 @@ export default function App() {
       const res = await fetch(`/api/auth/patient/verify-forgot?phone=${encodeURIComponent(patientForgotPhone.trim())}`);
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        alert(data.message || "No matching patient vault found for this number.");
+        toast.error(data.message || "No matching patient vault found for this number.");
         setIsPatientForgotSending(false);
         return;
       }
@@ -992,12 +994,12 @@ export default function App() {
       const otpData = await otpRes.json();
       if (otpRes.ok && otpData.ok) {
         setPatientForgotMode("verify");
-        alert("Verification code has been dispatched to your registered WhatsApp number.");
+        toast.success("Verification code has been dispatched to your registered WhatsApp number.");
       } else {
-        alert(otpData.message || "Failed to dispatch verification code.");
+        toast.error(otpData.message || "Failed to dispatch verification code.");
       }
     } catch (err) {
-      alert("Security service communication failed.");
+      toast.error("Security service communication failed.");
     } finally {
       setIsPatientForgotSending(false);
     }
@@ -1006,11 +1008,11 @@ export default function App() {
   const handlePatientForgotResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (patientForgotNewPin.length !== 6 || isNaN(Number(patientForgotNewPin))) {
-      alert("PIN must be exactly 6 numeric digits.");
+      toast.warning("PIN must be exactly 6 numeric digits.");
       return;
     }
     if (patientForgotNewPin !== patientForgotNewPinConfirm) {
-      alert("PIN confirmation does not match.");
+      toast.error("PIN confirmation does not match.");
       return;
     }
     setIsPatientForgotSending(true);
@@ -1026,7 +1028,7 @@ export default function App() {
       });
       const resetData = await resetRes.json();
       if (resetRes.ok && resetData.ok) {
-        alert("Your Secure Vault PIN has been reset successfully! You can now log in with your new passcode.");
+        toast.success("Your Secure Vault PIN has been reset successfully! You can now log in with your new passcode.");
         setPatientForgotMode("none");
         setPatientForgotPhone("");
         setPatientForgotOtp("");
@@ -1035,10 +1037,10 @@ export default function App() {
         setLoginPhone(patientForgotPhone);
         setPatientSubView("login");
       } else {
-        alert(resetData.message || "Failed to reset vault PIN. Verify your OTP is correct.");
+        toast.error(resetData.message || "Failed to reset vault PIN. Verify your OTP is correct.");
       }
     } catch (err) {
-      alert("Security service verification failed.");
+      toast.error("Security service verification failed.");
     } finally {
       setIsPatientForgotSending(false);
     }
@@ -1173,7 +1175,7 @@ export default function App() {
 
     const validation = validateTemplatePlaceholders(doctorMessage);
     if (!validation.ok) {
-      alert(`Submission Blocked: Clinical templates contain 5 or more unedited placeholder tokens. Please customize these prior to sending:\n\n${validation.tokens.join(", ")}`);
+      toast.error(`Submission Blocked: Clinical templates contain 5 or more unedited placeholder tokens. Please customize these prior to sending:\n\n${validation.tokens.join(", ")}`);
       return;
     }
 
@@ -1209,7 +1211,7 @@ export default function App() {
     const prescriptionValidation = validateTemplatePlaceholders(closingPrescription);
     if (!notesValidation.ok || !prescriptionValidation.ok) {
       const allPlaceholders = Array.from(new Set([...notesValidation.tokens, ...prescriptionValidation.tokens]));
-      alert(`Submission Blocked: Clinical notes or prescription contain 5 or more unedited placeholder tokens. Please customize these prior to certifying:\n\n${allPlaceholders.join(", ")}`);
+      toast.error(`Submission Blocked: Clinical notes or prescription contain 5 or more unedited placeholder tokens. Please customize these prior to certifying:\n\n${allPlaceholders.join(", ")}`);
       return;
     }
 
@@ -1222,7 +1224,7 @@ export default function App() {
       const updated = consultationApi.getById(selectedDoctorCase.id);
       if (updated) setSelectedDoctorCase(updated);
       triggerRefresh();
-      alert("Consultation complete! Digital evaluation and cryptographic prescription issued.");
+      toast.success("Consultation complete! Digital evaluation and cryptographic prescription issued.");
     }
   };
 
@@ -1267,11 +1269,11 @@ export default function App() {
         setIsAdminAuthenticated(true);
         setAdminView("verifications");
       } else {
-        alert(data.message || "Invalid Admin clearance PIN.");
+        toast.error(data.message || "Invalid Admin clearance PIN.");
       }
     } catch (error) {
       console.error("Admin login error:", error);
-      alert("Admin authentication service is currently offline. Please try again later.");
+      toast.error("Admin authentication service is currently offline. Please try again later.");
     }
   };
 
@@ -2480,6 +2482,8 @@ export default function App() {
         </button>
       )}
     </div>
+    <ToastContainer />
+    <ConfirmModal />
   </div>
 );
 }

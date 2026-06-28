@@ -6,6 +6,7 @@ import {
 import { INTAKE_QUESTIONS } from "../data";
 import { formatNaira } from "../utils";
 import { pricingApi } from "../lib/api";
+import { toast } from "./ToastNotification";
 
 interface IntakeFormProps {
   selectedCondition: any;
@@ -52,12 +53,12 @@ export default function IntakeForm({
   const handleIntakeFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientName || !patientPhone || !patientAge) {
-      alert("Please fill in your confidential demographic information.");
+      toast.warning("Please fill in your confidential demographic information.");
       return;
     }
     const ageNum = parseInt(patientAge);
     if (isNaN(ageNum) || ageNum < 18) {
-      alert("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
+      toast.error("Under standard clinical guidelines, consultations are strictly restricted to individuals aged 18 and older.");
       return;
     }
 

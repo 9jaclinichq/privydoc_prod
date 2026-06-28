@@ -273,15 +273,14 @@ export default function IntakeForm({
           /* Bank Transfer info */
           <div className="bg-black p-5 rounded-2xl border border-zinc-900 space-y-4 animate-fade-in">
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Send exactly <span className="font-bold text-white">{formatNaira(baseConsultationPrice)}</span> via mobile app to the virtual bypass gateway bank account:
+              Click the button below to open the secure Flutterwave 
+              payment gateway. You can pay by card, bank transfer, 
+              or USSD — all options are available inside the 
+              payment window.
             </p>
-            <div className="p-4 bg-zinc-950 rounded-xl space-y-2.5 text-xs font-mono border border-zinc-900">
-              <p className="text-zinc-500 flex justify-between"><span>Gateway Bank:</span> <strong className="text-white">Wema Bank</strong></p>
-              <p className="text-zinc-500 flex justify-between"><span>Account Title:</span> <strong className="text-white">PrivyDoc Care LTD</strong></p>
-              <p className="text-zinc-500 flex justify-between"><span>Account NUBAN:</span> <strong className="text-[#E5C158] text-sm select-all">9901452140</strong></p>
-            </div>
             <p className="text-[10px] text-zinc-500 text-center italic">
-              Our Flutterwave system monitors incoming credits and auto-resolves in 10s.
+              Your payment is processed securely by Flutterwave. 
+              PrivyDoc does not store your card details.
             </p>
           </div>
         )}

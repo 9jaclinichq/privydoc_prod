@@ -6,6 +6,10 @@ const ASSETS_TO_CACHE = [
   "/pwa_logo.svg"
 ];
 
+// PrivyDoc PWA Prompt Sync Comment:
+// The main window captures the beforeinstallprompt and coordinates with the App state.
+// We also track navigator.getInstalledRelatedApps() dynamically to re-trigger or suppress prompts.
+
 // Install Event
 self.addEventListener("install", (event) => {
   event.waitUntil(

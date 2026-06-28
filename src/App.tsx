@@ -97,6 +97,10 @@ export default function App() {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
 
+  // PWA deferredPrompt and showPwaBanner states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showPwaBanner, setShowPwaBanner] = useState(false);
+
   // Clinician states
   const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(() => {
     try {
@@ -252,6 +256,102 @@ export default function App() {
       }
     }
   }, []);
+
+  // PWA Custom Install Prompt Banner Logic
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    if (isStandalone) {
+      setShowPwaBanner(false);
+      return;
+    }
+
+    const checkShowBanner = async () => {
+      let shouldShow = true;
+
+      // Check last dismissal
+      const dismissedTimeStr = localStorage.getItem("privydoc_pwa_dismissed");
+      if (dismissedTimeStr) {
+        const dismissedTime = parseInt(dismissedTimeStr, 10);
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        if (now - dismissedTime < sevenDaysMs) {
+          shouldShow = false;
+        }
+      }
+
+      // Check previously installed and now uninstalled (via getInstalledRelatedApps)
+      const isTopLevel = window.self === window.top;
+      if (isTopLevel && "getInstalledRelatedApps" in navigator) {
+        try {
+          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+          const isCurrentlyInstalled = relatedApps && relatedApps.length > 0;
+          if (isCurrentlyInstalled) {
+            localStorage.setItem("privydoc_pwa_previously_installed", "true");
+            shouldShow = false; // already installed, don't show prompt
+          } else {
+            const previouslyInstalled = localStorage.getItem("privydoc_pwa_previously_installed") === "true";
+            if (previouslyInstalled) {
+              // Override dismissal to re-show if uninstalled!
+              shouldShow = true;
+            }
+          }
+        } catch (e) {
+          console.warn("Gracefully handled check for installed related apps:", e);
+        }
+      }
+
+      // We only show banner if we have captured the installation prompt event!
+      if (shouldShow && deferredPrompt) {
+        setShowPwaBanner(true);
+      } else {
+        setShowPwaBanner(false);
+      }
+    };
+
+    checkShowBanner();
+  }, [deferredPrompt]);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      // Prevent browser default installation banner
+      e.preventDefault();
+      // Store the event so it can be triggered later.
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    const handleAppInstalled = () => {
+      localStorage.setItem("privydoc_pwa_previously_installed", "true");
+      setDeferredPrompt(null);
+      setShowPwaBanner(false);
+    };
+
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handlePwaInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      localStorage.setItem("privydoc_pwa_previously_installed", "true");
+    } else {
+      localStorage.setItem("privydoc_pwa_dismissed", Date.now().toString());
+    }
+    setDeferredPrompt(null);
+    setShowPwaBanner(false);
+  };
+
+  const handlePwaDismiss = () => {
+    localStorage.setItem("privydoc_pwa_dismissed", Date.now().toString());
+    setShowPwaBanner(false);
+  };
 
   // Inactivity / Background TTL Lock (30 minutes)
   useEffect(() => {
@@ -2209,6 +2309,39 @@ export default function App() {
         </div>
       </div>
     )}
+    {/* PWA Custom Install Banner */}
+    {showPwaBanner && (
+      <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-6 md:w-[420px] bg-zinc-950 border-2 border-[#d4af37]/20 p-5 rounded-2xl shadow-2xl z-50 animate-fade-in flex flex-col gap-3.5 backdrop-blur-md">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#d4af37]/10 flex items-center justify-center border border-[#d4af37]/20 shrink-0 text-[#d4af37]">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-extrabold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              Install PrivyDoc App
+            </h4>
+            <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
+              Install PrivyDoc for faster, private access to your secure medical vault.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2.5 pt-1">
+          <button
+            onClick={handlePwaDismiss}
+            className="px-4 py-2 text-zinc-400 hover:text-white font-bold text-xs rounded-lg transition-colors border border-zinc-800 hover:bg-zinc-900"
+          >
+            Not Now
+          </button>
+          <button
+            onClick={handlePwaInstall}
+            className="px-4 py-2 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-lg transition-colors shadow-lg shadow-[#d4af37]/10"
+          >
+            Install App
+          </button>
+        </div>
+      </div>
+    )}
+
     {/* Floating Scroll to Top / Bottom Helper Buttons */}
     <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2.5">
       {scrollY > 200 && (

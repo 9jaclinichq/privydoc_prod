@@ -228,6 +228,230 @@ export default function AdaptiveIntakeForm({
     ? Math.round(((currentIndex + 1) / activeQuestions.length) * 100)
     : 0;
 
+  // Helper to render controls for a single active question
+  const renderQuestion = (q: IntakeQuestion) => {
+    return (
+      <div key={q.id} className="w-full flex flex-col justify-start">
+        {/* Label and Autoload Lock Info */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase font-mono tracking-wider bg-neutral-900 text-[#C9A84C] px-2 py-1 rounded">
+            {q.category}
+          </span>
+          {q.autoLoad && (
+            <div className="flex items-center gap-1 text-xs text-neutral-400 font-mono">
+              <Lock className="w-3 h-3 text-[#C9A84C]" />
+              <span>Auto-filled</span>
+            </div>
+          )}
+        </div>
+
+        {/* Question Text */}
+        <h2 className="text-lg font-medium text-white mb-6 leading-relaxed" id={`q-text-${q.id}`}>
+          {q.text}
+        </h2>
+
+        {/* Answer Controls */}
+        <div className="space-y-3" id={`q-controls-${q.id}`}>
+          
+          {/* SINGLE SELECT */}
+          {q.type === "single" && q.options && (
+            <div className="grid grid-cols-1 gap-2">
+              {q.options.map((opt) => {
+                const isSelected = answers[q.id] === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={!!q.autoLoad}
+                    onClick={() => handleAnswerChange(q.id, opt, q.category)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
+                      isSelected
+                        ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white font-medium"
+                        : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
+                    }`}
+                  >
+                    <span>{opt}</span>
+                    {isSelected && <Check className="w-4 h-4 text-[#C9A84C]" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* MULTI SELECT */}
+          {q.type === "multi" && q.options && (
+            <div className="grid grid-cols-1 gap-2">
+              {q.options.map((opt) => {
+                const currentSel = (answers[q.id] as string[]) || [];
+                const isSelected = currentSel.includes(opt);
+
+                const handleMultiToggle = () => {
+                  if (q.autoLoad) return;
+                  let updated: string[];
+                  if (opt === "None of the above" || opt === "None known") {
+                    updated = isSelected ? [] : [opt];
+                  } else {
+                    // Deselect none options
+                    const filtered = currentSel.filter(
+                      (item) => item !== "None of the above" && item !== "None known"
+                    );
+                    if (isSelected) {
+                      updated = filtered.filter((item) => item !== opt);
+                    } else {
+                      updated = [...filtered, opt];
+                    }
+                  }
+                  handleAnswerChange(q.id, updated, q.category);
+                };
+
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={!!q.autoLoad}
+                    onClick={handleMultiToggle}
+                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
+                      isSelected
+                        ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white font-medium"
+                        : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
+                    }`}
+                  >
+                    <span>{opt}</span>
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      isSelected ? "border-[#C9A84C] bg-[#C9A84C]" : "border-neutral-600"
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-black font-extrabold" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* BOOLEAN */}
+          {q.type === "boolean" && (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Yes", val: true },
+                { label: "No", val: false }
+              ].map((btn) => {
+                const currentVal = answers[q.id];
+                const isSelected = currentVal === btn.val || String(currentVal).toLowerCase() === btn.label.toLowerCase();
+
+                return (
+                  <button
+                    key={btn.label}
+                    type="button"
+                    disabled={!!q.autoLoad}
+                    onClick={() => handleAnswerChange(q.id, btn.val, q.category)}
+                    className={`py-3 rounded-xl border text-sm transition-all font-medium text-center ${
+                      isSelected
+                        ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white"
+                        : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
+                    }`}
+                  >
+                    {btn.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* SCALE SELECTOR */}
+          {q.type === "scale" && (
+            <div className="space-y-4 px-2 py-3 bg-neutral-900/30 rounded-xl border border-neutral-800/45">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-mono text-neutral-400">
+                  {q.scaleLabels?.min || "Low"}
+                </span>
+                <span className="text-2xl font-semibold text-white font-mono bg-[#C9A84C]/10 border border-[#C9A84C]/25 px-3 py-1 rounded-lg">
+                  {answers[q.id] !== undefined ? answers[q.id] : "-"}
+                </span>
+                <span className="text-xs font-mono text-neutral-400">
+                  {q.scaleLabels?.max || "High"}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={q.scaleMin || 1}
+                max={q.scaleMax || 10}
+                disabled={!!q.autoLoad}
+                value={answers[q.id] || q.scaleMin || 1}
+                onChange={(e) =>
+                  handleAnswerChange(
+                    q.id,
+                    parseInt(e.target.value),
+                    q.category
+                  )
+                }
+                className="w-full accent-[#C9A84C] h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+          )}
+
+          {/* TEXT INPUT */}
+          {q.type === "text" && (
+            q.category === "demographics" ? (
+              <input
+                type="text"
+                disabled={!!q.autoLoad}
+                value={answers[q.id] || ""}
+                onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                placeholder="Please type your response here..."
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+              />
+            ) : (
+              <textarea
+                disabled={!!q.autoLoad}
+                value={answers[q.id] || ""}
+                onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                placeholder="Please type your response here..."
+                rows={4}
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+              />
+            )
+          )}
+
+          {/* NUMBER INPUT */}
+          {q.type === "number" && (
+            <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-xl p-2 w-full max-w-[200px] mx-auto">
+              <button
+                type="button"
+                disabled={!!q.autoLoad}
+                onClick={() => {
+                  const curr = parseInt(answers[q.id]) || 0;
+                  handleAnswerChange(q.id, Math.max(0, curr - 1), q.category);
+                }}
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-neutral-800 text-white font-semibold hover:bg-neutral-700 disabled:opacity-50"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                disabled={!!q.autoLoad}
+                value={answers[q.id] || ""}
+                onChange={(e) => handleAnswerChange(q.id, parseInt(e.target.value) || 0, q.category)}
+                className="flex-1 bg-transparent text-center text-white text-lg font-mono focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <button
+                type="button"
+                disabled={!!q.autoLoad}
+                onClick={() => {
+                  const curr = parseInt(answers[q.id]) || 0;
+                  handleAnswerChange(q.id, curr + 1, q.category);
+                }}
+                className="w-10 h-10 flex items-center justify-center rounded-lg bg-neutral-800 text-white font-semibold hover:bg-neutral-700 disabled:opacity-50"
+              >
+                +
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full flex flex-col gap-4" id="adaptive-intake-form-outer">
       
@@ -248,258 +472,14 @@ export default function AdaptiveIntakeForm({
       </div>
 
       {/* Main Card (hugs content, flexible height, padded) */}
-      <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-24 md:pb-6" id="adaptive-intake-form-wrapper">
+      <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-6" id="adaptive-intake-form-wrapper">
         
-        {/* Main Slide Card Area */}
-        <div className="overflow-hidden relative min-h-[180px] h-auto" id="intake-card-viewport">
-          <div
-            className="flex transition-transform duration-300 ease-out h-auto items-start"
-            style={{ transform: `translateX(-${currentIndex * (100 / (activeQuestions.length || 1))}%)`, width: `${activeQuestions.length * 100}%` }}
-          >
-            {activeQuestions.map((q, idx) => {
-              const isSelectedAnswerValid = () => {
-              if (!q.required) return true;
-              const ans = answers[q.id];
-              if (ans === undefined || ans === null) return false;
-              if (q.type === "multi") {
-                return Array.isArray(ans) && ans.length > 0;
-              }
-              if (q.type === "text") {
-                return typeof ans === "string" && ans.trim().length > 0;
-              }
-              if (q.type === "boolean") {
-                return ans === true || ans === false || ans === "Yes" || ans === "No";
-              }
-              return true;
-            };
-
-            return (
-              <div
-                key={q.id}
-                className="w-full flex-shrink-0 flex flex-col justify-start px-1"
-                style={{ width: `${100 / activeQuestions.length}%` }}
-              >
-                {/* Label and Autoload Lock Info */}
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] uppercase font-mono tracking-wider bg-neutral-900 text-[#C9A84C] px-2 py-1 rounded">
-                    {q.category}
-                  </span>
-                  {q.autoLoad && (
-                    <div className="flex items-center gap-1 text-xs text-neutral-400 font-mono">
-                      <Lock className="w-3 h-3 text-[#C9A84C]" />
-                      <span>Auto-filled</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Question Text */}
-                <h2 className="text-lg font-medium text-white mb-6 leading-relaxed" id={`q-text-${q.id}`}>
-                  {q.text}
-                </h2>
-
-                {/* Answer Controls */}
-                <div className="space-y-3" id={`q-controls-${q.id}`}>
-                  
-                  {/* SINGLE SELECT */}
-                  {q.type === "single" && q.options && (
-                    <div className="grid grid-cols-1 gap-2">
-                      {q.options.map((opt) => {
-                        const isSelected = answers[q.id] === opt;
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            disabled={!!q.autoLoad}
-                            onClick={() => handleAnswerChange(q.id, opt, q.category)}
-                            className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
-                              isSelected
-                                ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white font-medium"
-                                : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
-                            }`}
-                          >
-                            <span>{opt}</span>
-                            {isSelected && <Check className="w-4 h-4 text-[#C9A84C]" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* MULTI SELECT */}
-                  {q.type === "multi" && q.options && (
-                    <div className="grid grid-cols-1 gap-2">
-                      {q.options.map((opt) => {
-                        const currentSel = (answers[q.id] as string[]) || [];
-                        const isSelected = currentSel.includes(opt);
-
-                        const handleMultiToggle = () => {
-                          if (q.autoLoad) return;
-                          let updated: string[];
-                          if (opt === "None of the above" || opt === "None known") {
-                            updated = isSelected ? [] : [opt];
-                          } else {
-                            // Deselect none options
-                            const filtered = currentSel.filter(
-                              (item) => item !== "None of the above" && item !== "None known"
-                            );
-                            if (isSelected) {
-                              updated = filtered.filter((item) => item !== opt);
-                            } else {
-                              updated = [...filtered, opt];
-                            }
-                          }
-                          handleAnswerChange(q.id, updated, q.category);
-                        };
-
-                        return (
-                          <button
-                            key={opt}
-                            type="button"
-                            disabled={!!q.autoLoad}
-                            onClick={handleMultiToggle}
-                            className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
-                              isSelected
-                                ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white font-medium"
-                                : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
-                            }`}
-                          >
-                            <span>{opt}</span>
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                              isSelected ? "border-[#C9A84C] bg-[#C9A84C]" : "border-neutral-600"
-                            }`}>
-                              {isSelected && <Check className="w-3 h-3 text-black font-extrabold" />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* BOOLEAN */}
-                  {q.type === "boolean" && (
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { label: "Yes", val: true },
-                        { label: "No", val: false }
-                      ].map((btn) => {
-                        const currentVal = answers[q.id];
-                        const isSelected = currentVal === btn.val || String(currentVal).toLowerCase() === btn.label.toLowerCase();
-
-                        return (
-                          <button
-                            key={btn.label}
-                            type="button"
-                            disabled={!!q.autoLoad}
-                            onClick={() => handleAnswerChange(q.id, btn.val, q.category)}
-                            className={`py-3 rounded-xl border text-sm transition-all font-medium text-center ${
-                              isSelected
-                                ? "border-[#C9A84C] bg-[#C9A84C]/10 text-white"
-                                : "border-neutral-800 bg-neutral-900/50 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900"
-                            }`}
-                          >
-                            {btn.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* SCALE SELECTOR */}
-                  {q.type === "scale" && (
-                    <div className="space-y-4 px-2 py-3 bg-neutral-900/30 rounded-xl border border-neutral-800/45">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-mono text-neutral-400">
-                          {q.scaleLabels?.min || "Low"}
-                        </span>
-                        <span className="text-2xl font-semibold text-white font-mono bg-[#C9A84C]/10 border border-[#C9A84C]/25 px-3 py-1 rounded-lg">
-                          {answers[q.id] !== undefined ? answers[q.id] : "-"}
-                        </span>
-                        <span className="text-xs font-mono text-neutral-400">
-                          {q.scaleLabels?.max || "High"}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={q.scaleMin || 1}
-                        max={q.scaleMax || 10}
-                        disabled={!!q.autoLoad}
-                        value={answers[q.id] || q.scaleMin || 1}
-                        onChange={(e) =>
-                          handleAnswerChange(
-                            q.id,
-                            parseInt(e.target.value),
-                            q.category
-                          )
-                        }
-                        className="w-full accent-[#C9A84C] h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                  )}
-
-                  {/* TEXT INPUT */}
-                  {q.type === "text" && (
-                    q.category === "demographics" ? (
-                      <input
-                        type="text"
-                        disabled={!!q.autoLoad}
-                        value={answers[q.id] || ""}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
-                        placeholder="Please type your response here..."
-                        className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
-                      />
-                    ) : (
-                      <textarea
-                        disabled={!!q.autoLoad}
-                        value={answers[q.id] || ""}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
-                        placeholder="Please type your response here..."
-                        rows={4}
-                        className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
-                      />
-                    )
-                  )}
-
-                  {/* NUMBER INPUT */}
-                  {q.type === "number" && (
-                    <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-xl p-2 w-full max-w-[200px] mx-auto">
-                      <button
-                        type="button"
-                        disabled={!!q.autoLoad}
-                        onClick={() => {
-                          const curr = parseInt(answers[q.id]) || 0;
-                          handleAnswerChange(q.id, Math.max(0, curr - 1), q.category);
-                        }}
-                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-neutral-800 text-white font-semibold hover:bg-neutral-700 disabled:opacity-50"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        disabled={!!q.autoLoad}
-                        value={answers[q.id] || ""}
-                        onChange={(e) => handleAnswerChange(q.id, parseInt(e.target.value) || 0, q.category)}
-                        className="flex-1 bg-transparent text-center text-white text-lg font-mono focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={!!q.autoLoad}
-                        onClick={() => {
-                          const curr = parseInt(answers[q.id]) || 0;
-                          handleAnswerChange(q.id, curr + 1, q.category);
-                        }}
-                        className="w-10 h-10 flex items-center justify-center rounded-lg bg-neutral-800 text-white font-semibold hover:bg-neutral-700 disabled:opacity-50"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            );
-          })}
+        {/* Main Active Question Card Area */}
+        <div className="relative h-auto min-h-0" id="intake-card-viewport">
+          <div className="w-full animate-fade-in" key={currentQuestion?.id}>
+            {currentQuestion && renderQuestion(currentQuestion)}
+          </div>
         </div>
-      </div>
 
       {/* Navigation Buttons */}
       <div 

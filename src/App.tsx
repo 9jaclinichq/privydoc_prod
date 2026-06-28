@@ -228,6 +228,31 @@ export default function App() {
     }
   }, []);
 
+  // Restore pending payment if any on app mount
+  useEffect(() => {
+    const savedPending = localStorage.getItem("privydoc_pending_payment");
+    const patientSessionSaved = localStorage.getItem("privydoc_patient_session");
+    if (savedPending && patientSessionSaved) {
+      try {
+        const pending = JSON.parse(savedPending);
+        const cond = MEN_HEALTH_CONDITIONS.find(c => c.id === pending.selectedConditionId);
+        if (cond) {
+          setSelectedCondition(cond);
+          setPatientName(pending.patientName || "");
+          setPatientAge(pending.patientAge || "");
+          setPatientPhone(pending.patientPhone || "");
+          setIntakeAnswers(pending.intakeAnswers || {});
+          if (pending.paymentMethod) setPaymentMethod(pending.paymentMethod);
+          setCheckoutStep("payment");
+          setPatientSubView("intake");
+          setActiveTab("patient");
+        }
+      } catch (e) {
+        console.error("Failed to restore pending payment state:", e);
+      }
+    }
+  }, []);
+
   // Inactivity / Background TTL Lock (30 minutes)
   useEffect(() => {
     if (!patientSession) return;
@@ -449,6 +474,8 @@ export default function App() {
           cachedCons.push(data.consultation);
           localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
 
+          localStorage.removeItem("privydoc_pending_payment");
+
           setCheckoutStep("success");
           setSelectedCase(data.consultation);
           triggerRefresh();
@@ -464,7 +491,31 @@ export default function App() {
       return;
     }
 
-    const flwPublicKey = (import.meta as any).env?.VITE_FLW_PUBLIC_KEY || "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
+    // Save active payment state to localStorage before opening Flutterwave
+    localStorage.setItem("privydoc_pending_payment", JSON.stringify({
+      selectedConditionId: selectedCondition.id,
+      patientName,
+      patientAge,
+      patientPhone,
+      intakeAnswers,
+      paymentMethod,
+      tx_ref,
+      amount
+    }));
+
+    // Fetch dynamically configured Flutterwave public key from server-side config API at runtime
+    let flwPublicKey = "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
+    try {
+      const configRes = await fetch("/api/config/payment");
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        if (configData.ok && configData.flw_public_key) {
+          flwPublicKey = configData.flw_public_key;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch dynamically configured Flutterwave public key:", e);
+    }
 
     const customerEmail = localStorage.getItem("privydoc_patient_email") || `${patientPhone}@privydoc.com.ng`;
 
@@ -522,6 +573,8 @@ export default function App() {
               cachedCons.push(data.consultation);
               localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
 
+              localStorage.removeItem("privydoc_pending_payment");
+
               setCheckoutStep("success");
               setSelectedCase(data.consultation);
               triggerRefresh();
@@ -572,6 +625,8 @@ export default function App() {
           const cachedCons = JSON.parse(localStorage.getItem("privydoc_consultations") || "[]");
           cachedCons.push(data.consultation);
           localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
+
+          localStorage.removeItem("privydoc_pending_payment");
 
           setCheckoutStep("success");
           setSelectedCase(data.consultation);
@@ -1791,7 +1846,10 @@ export default function App() {
                 setPaymentMethod={setPaymentMethod}
                 isSubmittingIntake={isSubmittingIntake}
                 onCompletePayment={handleCompletePayment}
-                onCancel={() => setPatientSubView("landing")}
+                onCancel={() => {
+                  localStorage.removeItem("privydoc_pending_payment");
+                  setPatientSubView("landing");
+                }}
               />
             )}
 

@@ -253,6 +253,13 @@ app.get("/api/healthz", (req, res) => {
   res.status(200).json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
 });
 
+app.get("/api/config/payment", (req, res) => {
+  res.status(200).json({
+    ok: true,
+    flw_public_key: process.env.FLW_PUBLIC_KEY || process.env.VITE_FLW_PUBLIC_KEY
+  });
+});
+
 // 2. Server-Cached Config Endpoint (/api/config)
 let configCache: { price_full: number; price_review: number; payout_pct: number; timestamp: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL

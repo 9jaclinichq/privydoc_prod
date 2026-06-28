@@ -435,14 +435,25 @@ export default function AdaptiveIntakeForm({
 
                   {/* TEXT INPUT */}
                   {q.type === "text" && (
-                    <textarea
-                      disabled={!!q.autoLoad}
-                      value={answers[q.id] || ""}
-                      onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
-                      placeholder="Please type your response here..."
-                      rows={4}
-                      className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
-                    />
+                    q.category === "demographics" ? (
+                      <input
+                        type="text"
+                        disabled={!!q.autoLoad}
+                        value={answers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                        placeholder="Please type your response here..."
+                        className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+                      />
+                    ) : (
+                      <textarea
+                        disabled={!!q.autoLoad}
+                        value={answers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                        placeholder="Please type your response here..."
+                        rows={4}
+                        className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+                      />
+                    )
                   )}
 
                   {/* NUMBER INPUT */}

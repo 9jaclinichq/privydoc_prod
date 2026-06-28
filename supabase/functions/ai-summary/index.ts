@@ -54,18 +54,43 @@ Deno.serve(async (req) => {
         .join("\n");
     }
 
-    const systemPrompt = `You are a clinical safety auditor and assistant for PrivyDoc, a men's telemedicine platform.
-Your task is to review a patient's medical intake form and provide a JSON response containing:
-1. "summary": A professional, concise 2-3 sentence clinical summary/brief for the reviewing doctor. Mention key demographics, condition duration, and any notable answers.
-2. "red_flag": A boolean (true or false). Set to true if the patient has any severe cardiovascular contraindications, active chest pain, heart disease (angina, previous heart attack, stroke), severe uncontrolled palpitations, or other symptoms that make online remote prescribing of vasoactive therapies (like PDE5 inhibitors for Erectile Dysfunction) highly unsafe.
+    const systemPrompt = `You are an expert clinical decision 
+support assistant for PrivyDoc, a confidential men's 
+telemedicine platform in Nigeria.
 
-You MUST respond with a valid, parseable JSON object ONLY, in this exact format:
+Analyze the patient's complete intake responses and 
+generate a structured clinical summary for the reviewing 
+physician in this exact JSON format:
+
 {
-  "summary": "Patient is a 34-year-old reporting Erectile Dysfunction of 3-6 months. No cardiovascular contraindications reported.",
-  "red_flag": false
+  "summary": "2-3 sentence clinical overview mentioning 
+    age, condition, duration, key risk factors",
+  "presenting_complaint": "One sentence description of 
+    the main presenting complaint",
+  "key_findings": ["finding 1", "finding 2", "finding 3"],
+  "risk_factors": ["risk 1", "risk 2"],
+  "shim_score": null or { "score": number, "severity": 
+    "Mild|Moderate|Severe|No ED" },
+  "red_flag": false,
+  "red_flag_reasons": [],
+  "suggested_approach": "One paragraph of evidence-based 
+    management suggestions for the doctor to consider. 
+    Not a prescription. For doctor review only.",
+  "differential_considerations": ["possible 1", 
+    "possible 2"],
+  "contraindication_alert": null or "specific warning"
 }
 
-Do not include any greeting, explanation, markdown blocks, or other text outside the JSON object. Just the JSON object.`;
+Rules:
+- red_flag true ONLY for: active chest pain, nitrate use 
+  with ED, recent MI/stroke <6 months, priapism, 
+  suicidal ideation, testicular torsion symptoms
+- suggested_approach must end with: "All management 
+  decisions remain with the reviewing clinician."
+- Use Nigerian clinical context where relevant
+- Never use patient-facing language — this is for 
+  the doctor only
+- Respond with valid JSON only, no markdown`;
 
     const userPrompt = `Condition: ${condition || "unspecified"}
 Intake Answers:
@@ -116,8 +141,41 @@ Analyze the above intake and return the clinical brief and safety check boolean.
       };
     }
 
+    let formattedSummary = "";
+    if (parsed && typeof parsed === "object") {
+      const parts: string[] = [];
+      if (parsed.summary) {
+        parts.push(`SUMMARY:\n${parsed.summary}`);
+      }
+      if (parsed.presenting_complaint) {
+        parts.push(`PRESENTING COMPLAINT:\n${parsed.presenting_complaint}`);
+      }
+      if (parsed.key_findings && Array.isArray(parsed.key_findings) && parsed.key_findings.length > 0) {
+        parts.push(`KEY FINDINGS:\n${parsed.key_findings.map((f: string) => `- ${f}`).join("\n")}`);
+      }
+      if (parsed.risk_factors && Array.isArray(parsed.risk_factors) && parsed.risk_factors.length > 0) {
+        parts.push(`RISK FACTORS:\n${parsed.risk_factors.map((r: string) => `- ${r}`).join("\n")}`);
+      }
+      if (parsed.shim_score) {
+        const shim = typeof parsed.shim_score === "object" && parsed.shim_score !== null
+          ? `Score: ${parsed.shim_score.score}, Severity: ${parsed.shim_score.severity}`
+          : String(parsed.shim_score);
+        parts.push(`SHIM SCORE:\n${shim}`);
+      }
+      if (parsed.suggested_approach) {
+        parts.push(`SUGGESTED CLINICAL APPROACH:\n${parsed.suggested_approach}`);
+      }
+      if (parsed.differential_considerations && Array.isArray(parsed.differential_considerations) && parsed.differential_considerations.length > 0) {
+        parts.push(`DIFFERENTIAL CONSIDERATIONS:\n${parsed.differential_considerations.map((d: string) => `- ${d}`).join("\n")}`);
+      }
+      if (parsed.contraindication_alert) {
+        parts.push(`⚠ CONTRAINDICATION ALERT:\n${parsed.contraindication_alert}`);
+      }
+      formattedSummary = parts.join("\n\n");
+    }
+
     return json({
-      summary: parsed.summary || "Clinical details submitted. Please review answers manually.",
+      summary: formattedSummary || parsed.summary || "Clinical details submitted. Please review answers manually.",
       red_flag: !!parsed.red_flag,
       ok: true
     });

@@ -229,15 +229,15 @@ export default function AdaptiveIntakeForm({
     : 0;
 
   return (
-    <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col justify-between min-h-[calc(100vh-140px)] md:min-h-0 md:h-auto pb-24 md:pb-6" id="adaptive-intake-form-wrapper">
+    <div className="w-full flex flex-col gap-4" id="adaptive-intake-form-outer">
       
-      {/* Progress & Header */}
-      <div className="mb-6 animate-fade-in relative z-10" id="intake-header-progress">
+      {/* Progress & Header (sticky/above the card) */}
+      <div className="mb-2 animate-fade-in relative z-10 px-4 md:px-0" id="intake-header-progress">
         <div className="flex justify-between items-center text-xs font-mono text-neutral-400 mb-2">
-          <span>
+          <span className="font-semibold text-neutral-300">
             {phase === 2 ? "Phase 2 — " : ""}Question {currentIndex + 1} of {activeQuestions.length}
           </span>
-          <span>{progressPercent}%</span>
+          <span className="font-semibold text-[#C9A84C]">{progressPercent}%</span>
         </div>
         <div className="w-full bg-neutral-800/80 h-2 rounded-full overflow-hidden relative z-10 shadow-inner">
           <div
@@ -247,14 +247,17 @@ export default function AdaptiveIntakeForm({
         </div>
       </div>
 
-      {/* Main Slide Card Area */}
-      <div className="overflow-hidden relative mb-6 min-h-[220px] md:min-h-[180px] h-auto" id="intake-card-viewport">
-        <div
-          className="flex transition-transform duration-300 ease-out h-auto items-start"
-          style={{ transform: `translateX(-${currentIndex * (100 / (activeQuestions.length || 1))}%)`, width: `${activeQuestions.length * 100}%` }}
-        >
-          {activeQuestions.map((q, idx) => {
-            const isSelectedAnswerValid = () => {
+      {/* Main Card (hugs content, flexible height, padded) */}
+      <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-24 md:pb-6" id="adaptive-intake-form-wrapper">
+        
+        {/* Main Slide Card Area */}
+        <div className="overflow-hidden relative min-h-[180px] h-auto" id="intake-card-viewport">
+          <div
+            className="flex transition-transform duration-300 ease-out h-auto items-start"
+            style={{ transform: `translateX(-${currentIndex * (100 / (activeQuestions.length || 1))}%)`, width: `${activeQuestions.length * 100}%` }}
+          >
+            {activeQuestions.map((q, idx) => {
+              const isSelectedAnswerValid = () => {
               if (!q.required) return true;
               const ans = answers[q.id];
               if (ans === undefined || ans === null) return false;
@@ -560,5 +563,6 @@ export default function AdaptiveIntakeForm({
       )}
 
     </div>
+  </div>
   );
 }

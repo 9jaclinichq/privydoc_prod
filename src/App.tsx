@@ -791,7 +791,7 @@ export default function App() {
   };
 
   // Search Patient Portal Cases
-  const handleSearchPatientPortal = () => {
+  const handleSearchPatientPortal = async () => {
     if (!searchPhone) return;
     const key = searchPhone.toLowerCase().trim();
     if (key === "doctor" || key === "clinician") {
@@ -811,22 +811,34 @@ export default function App() {
       return;
     }
 
-    // Check if patient exists
-    const existingPatient = patientApi.getByPhone(searchPhone);
-    if (existingPatient) {
-      if (patientSession && normPhone(patientSession.phone) === normPhone(searchPhone)) {
-        const cases = consultationApi.getByPatientPhone(searchPhone);
-        if (cases.length > 0) {
-          setSelectedCase(cases[0]);
-        }
-        setPatientSubView("portal");
-        return;
+    const normalized = normPhone(searchPhone);
+
+    try {
+      const res = await fetch(`/api/data/patients?phone=eq.${normalized}`);
+      if (!res.ok) {
+        throw new Error("Failed to query patients table via API");
       }
-      setLoginPhone(searchPhone);
-      setPatientSubView("login");
-    } else {
-      setRegPhone(searchPhone);
-      setPatientSubView("register");
+      const data = await res.json();
+      const found = Array.isArray(data) && data.length > 0;
+
+      if (found) {
+        setLoginPhone(searchPhone);
+        setPatientSubView("login");
+      } else {
+        setRegPhone(searchPhone);
+        setPatientSubView("register");
+      }
+    } catch (error) {
+      console.error("Error querying patients during portal search:", error);
+      // Fail-soft fallback to local mock API database
+      const existingPatient = patientApi.getByPhone(searchPhone);
+      if (existingPatient) {
+        setLoginPhone(searchPhone);
+        setPatientSubView("login");
+      } else {
+        setRegPhone(searchPhone);
+        setPatientSubView("register");
+      }
     }
   };
 

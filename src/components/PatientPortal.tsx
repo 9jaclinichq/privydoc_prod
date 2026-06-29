@@ -1,12 +1,13 @@
 import React, { useState } from "react";
-import { 
-  Lock, ArrowRight, ArrowLeft, User, ShieldAlert, FileText, FileDown, 
+import {
+  Lock, ArrowRight, ArrowLeft, User, ShieldAlert, FileText, FileDown,
   MessageSquare, Sparkles, Send, HelpCircle, Activity,
   LineChart, Compass, Wallet, Settings, Clock, Heart, ClipboardCheck
 } from "lucide-react";
 import { Consultation } from "../types";
 import { renderRichText } from "../utils";
 import { toast } from "./ToastNotification";
+import { MEN_HEALTH_CONDITIONS } from "../data";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
 
@@ -21,6 +22,7 @@ interface PatientPortalProps {
   setPatientMessage: (msg: string) => void;
   onSendPatientMessage: () => void;
   onStartNewCase: () => void;
+  onSelectNewCondition: (condition: typeof MEN_HEALTH_CONDITIONS[0]) => void;
   formatDate: (d: string) => string;
   formatNaira: (n: number) => string;
   onLogout?: () => void;
@@ -38,13 +40,14 @@ export default function PatientPortal({
   setPatientMessage,
   onSendPatientMessage,
   onStartNewCase,
+  onSelectNewCondition,
   formatDate,
   formatNaira,
   onLogout,
   patientName = ""
 }: PatientPortalProps) {
   // Sidebar state
-  const [activeSidebarTab, setActiveSidebarTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "payments">("dashboard");
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "payments" | "newCase">("dashboard");
 
   // Dispute states
   const [disputeSubmitted, setDisputeSubmitted] = useState<boolean>(false);
@@ -195,6 +198,16 @@ export default function PatientPortal({
                 <Activity className="w-4 h-4" /> Dashboard
               </button>
               <button
+                onClick={() => setActiveSidebarTab("newCase")}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeSidebarTab === "newCase"
+                    ? "bg-[#d4af37]/10 text-[#E5C158]"
+                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
+                }`}
+              >
+                <ArrowRight className="w-4 h-4" /> Start New Consultation
+              </button>
+              <button
                 onClick={() => setActiveSidebarTab("cases")}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   activeSidebarTab === "cases" 
@@ -275,7 +288,41 @@ export default function PatientPortal({
 
           {/* Center Main Dashboard Panels */}
           <div className="lg:col-span-9 space-y-8">
-            
+
+            {/* VIEW NEW CASE: Start New Consultation (inline, stays within the portal) */}
+            {activeSidebarTab === "newCase" && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-1.5">
+                  <h4 className="text-sm font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    Start a New Consultation
+                  </h4>
+                  <p className="text-xs text-zinc-400">
+                    Select a condition below to begin a new confidential clinical assessment.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {MEN_HEALTH_CONDITIONS.map((cond) => (
+                    <div
+                      key={cond.id}
+                      className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 flex flex-col justify-between gap-4 hover:border-zinc-800 transition-all"
+                    >
+                      <div>
+                        <h5 className="text-sm font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          {cond.title}
+                        </h5>
+                      </div>
+                      <button
+                        onClick={() => onSelectNewCondition(cond)}
+                        className="self-start px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-[11px] rounded-xl transition-colors"
+                      >
+                        Initiate Intake
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* VIEW A: PATIENT MAIN DASHBOARD */}
             {activeSidebarTab === "dashboard" && (
               <div className="space-y-6 animate-fade-in">
@@ -294,8 +341,8 @@ export default function PatientPortal({
                       </p>
                     </div>
                     <div className="pt-2">
-                      <button 
-                        onClick={onStartNewCase}
+                      <button
+                        onClick={() => setActiveSidebarTab("newCase")}
                         className="px-6 py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-colors shadow flex items-center justify-center gap-2 mx-auto"
                       >
                         Start Clinical Assessment <ArrowRight className="w-4 h-4" />
@@ -411,8 +458,8 @@ export default function PatientPortal({
                         <h5 className="font-bold text-white text-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Experience secondary concerns?</h5>
                         <p className="text-xs text-zinc-400 mt-0.5">File an additional medical category case with another specialist.</p>
                       </div>
-                      <button 
-                        onClick={onStartNewCase}
+                      <button
+                        onClick={() => setActiveSidebarTab("newCase")}
                         className="px-4 py-2 border border-amber-500/25 text-[#E5C158] hover:bg-[#d4af37]/5 font-bold text-xs rounded-xl transition-colors"
                       >
                         Start New Program Case

@@ -1265,13 +1265,19 @@ export default function App() {
     }
   };
 
-  // True while the patient is actively filling out the clinical intake form
+  // True while the patient is actively filling out the clinical intake form.
+  // Mirrored into a ref so that handlers/closures created before a state update
+  // (e.g. nav buttons re-rendered on a slower mobile JS thread) always read the latest value.
   const isMidIntake = activeTab === "patient" && patientSubView === "intake" && checkoutStep !== "success";
+  const isIntakeActiveRef = useRef(false);
+  useEffect(() => {
+    isIntakeActiveRef.current = isMidIntake;
+  }, [isMidIntake]);
 
   // Shows the intake-abandonment warning if mid-intake. Returns true if the
   // caller should proceed with the navigation/action, false if the patient chose to stay.
   const confirmLeaveIntakeIfNeeded = async (): Promise<boolean> => {
-    if (!isMidIntake) return true;
+    if (!isIntakeActiveRef.current) return true;
     const stay = await confirm(
       "Your progress will be lost if you leave now. Are you sure you want to cancel this assessment?",
       { confirmLabel: "Stay", cancelLabel: "Leave Assessment" }
@@ -1281,7 +1287,7 @@ export default function App() {
 
   // Patient Logout
   const handlePatientLogout = async () => {
-    if (isMidIntake) {
+    if (isIntakeActiveRef.current) {
       const canLeave = await confirmLeaveIntakeIfNeeded();
       if (!canLeave) return;
     } else {
@@ -2488,6 +2494,7 @@ export default function App() {
                 formatDate={formatDate}
                 formatNaira={formatNaira}
                 onLogout={handlePatientLogout}
+                onDeleteAccount={handleDeleteAccount}
                 patientName={patientSession?.name || ""}
                 activeSidebarTab={patientPortalTab}
                 setActiveSidebarTab={setPatientPortalTab}

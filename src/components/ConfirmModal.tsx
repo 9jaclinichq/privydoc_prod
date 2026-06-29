@@ -55,9 +55,9 @@ export function ConfirmModal() {
   if (!state || !state.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-55 flex items-center justify-center p-4 animate-fade-in">
-      <div 
-        className="w-full max-w-sm bg-[#161c25] border border-zinc-800/80 rounded-2xl shadow-2xl p-6 flex flex-col gap-5 animate-slide-up"
+    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+      <div
+        className="w-full max-w-[320px] mx-auto bg-[#161c25] border border-zinc-800/80 rounded-2xl shadow-2xl p-6 flex flex-col gap-5 animate-slide-up"
         style={{ animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}
       >
         <div className="flex flex-col items-center text-center gap-3">

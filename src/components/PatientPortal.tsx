@@ -8,6 +8,7 @@ import { Consultation } from "../types";
 import { renderRichText } from "../utils";
 import { toast } from "./ToastNotification";
 import { MEN_HEALTH_CONDITIONS } from "../data";
+import { Trash2 } from "lucide-react";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
 
@@ -27,6 +28,7 @@ interface PatientPortalProps {
   formatDate: (d: string) => string;
   formatNaira: (n: number) => string;
   onLogout?: () => void;
+  onDeleteAccount?: () => void;
   patientName?: string;
   activeSidebarTab: "dashboard" | "cases" | "messages" | "reports" | "newCase";
   setActiveSidebarTab: (tab: "dashboard" | "cases" | "messages" | "reports" | "newCase") => void;
@@ -48,6 +50,7 @@ export default function PatientPortal({
   formatDate,
   formatNaira,
   onLogout,
+  onDeleteAccount,
   patientName = "",
   activeSidebarTab,
   setActiveSidebarTab
@@ -357,6 +360,18 @@ export default function PatientPortal({
                       </button>
                     </div>
                   </>
+                )}
+
+                {/* Delete Account — desktop already has this in the app-level sidebar, so only show it here on mobile/tablet */}
+                {onDeleteAccount && (
+                  <div className="lg:hidden pt-2 text-center">
+                    <button
+                      onClick={onDeleteAccount}
+                      className="inline-flex items-center justify-center gap-1.5 py-2 px-3 text-rose-500/70 hover:text-rose-400 text-[11px] font-bold transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete Account
+                    </button>
+                  </div>
                 )}
               </div>
             )}

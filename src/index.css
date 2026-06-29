@@ -178,12 +178,10 @@ body {
   .app-container { max-width: 520px; }
 }
 @media (min-width: 900px) {
-  /* Desktop: drop the decorative side gutters and let the app use the full viewport width */
-  .app-side { display: none; }
-  .app-container { max-width: 100%; box-shadow: none; }
+  .app-container { max-width: 560px; box-shadow: 0 0 120px rgba(212,175,90,0.07), 0 0 60px rgba(0,0,0,0.9); }
 }
 @media (min-width: 1200px) {
-  .app-container { max-width: 1200px; margin: 0 auto; }
+  .app-container { max-width: 600px; }
 }
 
 /* Luxury Card Gloss Hover Effect */

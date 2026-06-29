@@ -110,7 +110,7 @@ export default function PatientLanding({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-5">
           {MEN_HEALTH_CONDITIONS.map((cond) => (
             <div
               key={cond.id}

@@ -110,9 +110,9 @@ export default function PatientLanding({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {MEN_HEALTH_CONDITIONS.map((cond) => (
-            <div 
+            <div
               key={cond.id}
               className="luxury-hover bg-zinc-950/80 rounded-2xl border border-zinc-900 p-6 flex flex-col justify-between gap-5 transition-all group shadow-lg"
             >

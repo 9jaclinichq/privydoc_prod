@@ -1,9 +1,7 @@
 import React from "react";
 import { Shield, Activity, ArrowRight, ClipboardCheck, PhoneCall, HeartPulse } from "lucide-react";
 import { MEN_HEALTH_CONDITIONS } from "../data";
-import { formatNaira } from "../utils";
 import Logo from "./Logo";
-import { pricingApi } from "../lib/api";
 
 interface PatientLandingProps {
   onSelectSymptom: (id: string) => void;
@@ -28,7 +26,6 @@ export default function PatientLanding({
   onLogout = () => {},
   onSelectClinician = () => {}
 }: PatientLandingProps) {
-  const baseConsultationPrice = pricingApi.getById("base_consultation")?.price ?? 7500;
   return (
     <div className="space-y-16 animate-slide-up">
       {/* Visual Header / Splash Hero Card */}
@@ -139,12 +136,7 @@ export default function PatientLanding({
                 </p>
               </div>
 
-              <div className="flex items-center justify-between border-t border-zinc-900/80 pt-4 mt-auto">
-                <div className="text-left">
-                  <p className="text-[8.5px] uppercase tracking-wider text-zinc-500 font-mono">CLINIC FEE</p>
-                  <p className="text-xs font-bold text-zinc-400">{formatNaira(baseConsultationPrice)}</p>
-                </div>
-
+              <div className="flex items-center justify-end border-t border-zinc-900/80 pt-4 mt-auto">
                 <div className="flex gap-2">
                   <button 
                     onClick={() => onSelectSymptom(cond.id)}

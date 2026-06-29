@@ -37,6 +37,8 @@ export default function App() {
   // Compliance and Alert Pre-Permissions states
   const [permissionModal, setPermissionModal] = useState<"location" | "notifications" | null>(null);
   const [pendingCondition, setPendingCondition] = useState<typeof MEN_HEALTH_CONDITIONS[0] | null>(null);
+  const [skipWelcomeBack, setSkipWelcomeBack] = useState(false);
+  const [geoCheckState, setGeoCheckState] = useState<"ask" | "outside" | "denied">("ask");
 
   // Patient session / authentication states
   const [patientSession, setPatientSession] = useState<Patient | null>(() => {
@@ -98,7 +100,7 @@ export default function App() {
   });
   const [patientMessage, setPatientMessage] = useState("");
   const [checkoutStep, setCheckoutStep] = useState<"form" | "payment" | "success" | "red_flag">("form");
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("bank");
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false);
 
   // PWA deferredPrompt and showPwaBanner states
@@ -542,6 +544,27 @@ export default function App() {
     successAction();
   };
 
+  // Enter the patient portal dashboard, claiming an active case if one exists
+  const enterVault = () => {
+    if (patientSession && !selectedCase) {
+      const cases = consultationApi.getByPatientPhone(patientSession.phone);
+      if (cases.length > 0) {
+        setSelectedCase(cases[0]);
+      }
+    }
+    setPatientSubView("portal");
+  };
+
+  // Welcome-back safety net: auto-redirect logged-in patients to the portal after 2s of inaction
+  useEffect(() => {
+    if (patientSubView === "landing" && patientSession && !skipWelcomeBack) {
+      const timer = setTimeout(() => {
+        enterVault();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [patientSubView, patientSession, skipWelcomeBack]);
+
   // Symptom checker selector
   const handleSymptomSelect = (conditionId: string) => {
     const condition = MEN_HEALTH_CONDITIONS.find(c => c.id === conditionId);
@@ -549,11 +572,28 @@ export default function App() {
       setSelectedCondition(condition);
       setSymptomAnswers({});
       setPatientSubView("symptom");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  // Check whether the patient has already passed the MDCN Nigeria geolocation check
+  const isGeoVerified = (): boolean => {
+    try {
+      const raw = localStorage.getItem("privydoc_geo_verified");
+      if (!raw) return false;
+      return !!JSON.parse(raw).verified;
+    } catch {
+      return false;
     }
   };
 
   // Start Clinical Intake Form (triggers compliance pre-permission)
   const handleStartIntake = (condition: typeof MEN_HEALTH_CONDITIONS[0]) => {
+    if (isGeoVerified()) {
+      proceedWithIntake(condition);
+      return;
+    }
+    setGeoCheckState("ask");
     setPendingCondition(condition);
     setPermissionModal("location");
   };
@@ -561,7 +601,8 @@ export default function App() {
   const proceedWithIntake = (condition: typeof MEN_HEALTH_CONDITIONS[0]) => {
     setSelectedCondition(condition);
     setIntakeAnswers({});
-    
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
     // Check if patient is logged in
     if (patientSession) {
       setPatientName(patientSession.name);
@@ -579,7 +620,7 @@ export default function App() {
   };
 
   // Complete Payment & Save Consultation using real Flutterwave gateway (or bypass in test mode)
-  const handleCompletePayment = async (bypass: boolean = false) => {
+  const handleCompletePayment = async (bypass: boolean = false, onPaymentCancelled?: () => void) => {
     if (!selectedCondition) return;
     setIsSubmittingIntake(true);
 
@@ -626,6 +667,7 @@ export default function App() {
           localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
 
           localStorage.removeItem("privydoc_pending_payment");
+          localStorage.removeItem("privydoc_pending_intake");
 
           setCheckoutStep("success");
           setSelectedCase(data.consultation);
@@ -726,6 +768,7 @@ export default function App() {
               localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
 
               localStorage.removeItem("privydoc_pending_payment");
+              localStorage.removeItem("privydoc_pending_intake");
 
               setCheckoutStep("success");
               setSelectedCase(data.consultation);
@@ -742,6 +785,7 @@ export default function App() {
         },
         onclose: () => {
           setIsSubmittingIntake(false);
+          onPaymentCancelled?.();
         }
       });
     } else {
@@ -779,6 +823,7 @@ export default function App() {
           localStorage.setItem("privydoc_consultations", JSON.stringify(cachedCons));
 
           localStorage.removeItem("privydoc_pending_payment");
+          localStorage.removeItem("privydoc_pending_intake");
 
           setCheckoutStep("success");
           setSelectedCase(data.consultation);
@@ -1141,6 +1186,7 @@ export default function App() {
     setPatientSession(null);
     setSelectedCase(null);
     setSearchPhone("");
+    setSkipWelcomeBack(false);
     setPatientSubView("landing");
   };
 
@@ -1489,19 +1535,45 @@ export default function App() {
           <div className="space-y-12">
             
             {/* Landing */}
-            {patientSubView === "landing" && (
-              <PatientLanding 
+            {patientSubView === "landing" && patientSession && !skipWelcomeBack && (
+              <div className="min-h-[60vh] flex items-center justify-center animate-fade-in">
+                <div className="max-w-sm w-full bg-zinc-950 border border-zinc-900 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+                  <h2 className="text-xl font-bold text-[#d4af37]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    Welcome back, {patientSession.name?.split(" ")[0] || patientSession.name}
+                  </h2>
+                  {(() => {
+                    const activeCount = consultationApi.getByPatientPhone(patientSession.phone).filter(c => c.status !== "completed").length;
+                    return activeCount > 0 ? (
+                      <p className="text-xs text-zinc-400">
+                        You have <span className="text-white font-bold">{activeCount}</span> active case{activeCount === 1 ? "" : "s"}.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-zinc-500">No active cases right now.</p>
+                    );
+                  })()}
+                  <div className="space-y-3 pt-2">
+                    <button
+                      onClick={enterVault}
+                      className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all"
+                    >
+                      Enter Your Vault
+                    </button>
+                    <button
+                      onClick={() => setSkipWelcomeBack(true)}
+                      className="w-full py-3 bg-transparent border border-zinc-800 hover:border-zinc-700 text-zinc-300 font-bold text-xs rounded-xl transition-all"
+                    >
+                      Start New Consultation
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {patientSubView === "landing" && (!patientSession || skipWelcomeBack) && (
+              <PatientLanding
                 onSelectSymptom={handleSymptomSelect}
                 onStartIntake={handleStartIntake}
-                onEnterPortal={() => {
-                  if (patientSession && !selectedCase) {
-                    const cases = consultationApi.getByPatientPhone(patientSession.phone);
-                    if (cases.length > 0) {
-                      setSelectedCase(cases[0]);
-                    }
-                  }
-                  setPatientSubView("portal");
-                }}
+                onEnterPortal={enterVault}
                 searchPhone={searchPhone}
                 setSearchPhone={setSearchPhone}
                 onSearchPortal={handleSearchPatientPortal}
@@ -2079,6 +2151,7 @@ export default function App() {
                 onCompletePayment={handleCompletePayment}
                 onCancel={() => {
                   localStorage.removeItem("privydoc_pending_payment");
+                  localStorage.removeItem("privydoc_pending_intake");
                   setPatientSubView("landing");
                 }}
               />
@@ -2324,6 +2397,89 @@ export default function App() {
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#d4af37] to-[#b8860b]" />
           
           {permissionModal === "location" ? (
+            geoCheckState === "outside" ? (
+              <>
+                <div className="text-center space-y-3">
+                  <div className="w-14 h-14 bg-red-500/10 text-red-400 border border-red-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-red-500/5">
+                    <MapPin className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    OUTSIDE SERVICE JURISDICTION
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
+                    PrivyDoc services are currently only available to patients physically located in Nigeria as required by MDCN guidelines.
+                  </p>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <button
+                    onClick={() => {
+                      localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: true, timestamp: Date.now() }));
+                      setPermissionModal(null);
+                      setGeoCheckState("ask");
+                      if (pendingCondition) {
+                        const cond = pendingCondition;
+                        setPendingCondition(null);
+                        proceedWithIntake(cond);
+                      }
+                    }}
+                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5"
+                  >
+                    I am in Nigeria
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPermissionModal(null);
+                      setPendingCondition(null);
+                      setGeoCheckState("ask");
+                    }}
+                    className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                  >
+                    Exit
+                  </button>
+                </div>
+              </>
+            ) : geoCheckState === "denied" ? (
+              <>
+                <div className="text-center space-y-3">
+                  <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
+                    <MapPin className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    LOCATION ACCESS NEEDED
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
+                    We couldn't verify your location. Under MDCN guidelines, PrivyDoc consultations are restricted to patients physically located in Nigeria. You can grant location access again, or self-declare your residence below.
+                  </p>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <button
+                    onClick={() => {
+                      localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: true, timestamp: Date.now() }));
+                      setPermissionModal(null);
+                      setGeoCheckState("ask");
+                      if (pendingCondition) {
+                        const cond = pendingCondition;
+                        setPendingCondition(null);
+                        proceedWithIntake(cond);
+                      }
+                    }}
+                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5"
+                  >
+                    I am in Nigeria
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPermissionModal(null);
+                      setPendingCondition(null);
+                      setGeoCheckState("ask");
+                    }}
+                    className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                  >
+                    Cancel Consultation
+                  </button>
+                </div>
+              </>
+            ) : (
             <>
               <div className="text-center space-y-3">
                 <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
@@ -2349,30 +2505,29 @@ export default function App() {
                     if (navigator.geolocation) {
                       navigator.geolocation.getCurrentPosition(
                         (pos) => {
-                          setPermissionModal(null);
-                          if (pendingCondition) {
-                            const cond = pendingCondition;
-                            setPendingCondition(null);
-                            proceedWithIntake(cond);
+                          const { latitude, longitude } = pos.coords;
+                          const inNigeria = latitude >= 4.0 && latitude <= 14.0 && longitude >= 2.7 && longitude <= 15.0;
+
+                          if (inNigeria) {
+                            localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: false, timestamp: Date.now() }));
+                            setPermissionModal(null);
+                            setGeoCheckState("ask");
+                            if (pendingCondition) {
+                              const cond = pendingCondition;
+                              setPendingCondition(null);
+                              proceedWithIntake(cond);
+                            }
+                          } else {
+                            setGeoCheckState("outside");
                           }
                         },
                         (err) => {
                           console.warn("Location permission denied", err);
-                          setPermissionModal(null);
-                          if (pendingCondition) {
-                            const cond = pendingCondition;
-                            setPendingCondition(null);
-                            proceedWithIntake(cond);
-                          }
+                          setGeoCheckState("denied");
                         }
                       );
                     } else {
-                      setPermissionModal(null);
-                      if (pendingCondition) {
-                        const cond = pendingCondition;
-                        setPendingCondition(null);
-                        proceedWithIntake(cond);
-                      }
+                      setGeoCheckState("denied");
                     }
                   }}
                   className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
@@ -2383,6 +2538,7 @@ export default function App() {
                   onClick={() => {
                     setPermissionModal(null);
                     setPendingCondition(null);
+                    setGeoCheckState("ask");
                   }}
                   className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
                 >
@@ -2390,6 +2546,7 @@ export default function App() {
                 </button>
               </div>
             </>
+            )
           ) : (() => {
             const isNotifDenied = typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied";
             if (isNotifDenied) {

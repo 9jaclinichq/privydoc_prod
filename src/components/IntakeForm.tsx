@@ -28,7 +28,7 @@ interface IntakeFormProps {
   paymentMethod: "card" | "bank";
   setPaymentMethod: (method: "card" | "bank") => void;
   isSubmittingIntake: boolean;
-  onCompletePayment: (bypass?: boolean) => void;
+  onCompletePayment: (bypass?: boolean, onPaymentCancelled?: () => void) => void;
   onCancel: () => void;
 }
 
@@ -79,10 +79,35 @@ export default function IntakeForm({
 
   // Patient confirms final summary and triggers the real Flutterwave payment + doctor submission
   const handleFinalPaymentProceed = () => {
+    // Persist current answers before the Flutterwave popup opens, so they can be
+    // restored if the patient closes the popup or the page reloads mid-payment.
+    localStorage.setItem("privydoc_pending_intake", JSON.stringify({
+      phase1Answers,
+      phase2Answers: pendingFinalAnswers || intakeAnswers,
+      track: selectedCondition?.id,
+      condition: selectedCondition?.title,
+      patientPhone,
+      patientName,
+      patientAge,
+      patientEmail,
+      savedAt: Date.now()
+    }));
+
     if (pendingFinalAnswers) {
       setIntakeAnswers(pendingFinalAnswers);
     }
-    onCompletePayment();
+
+    onCompletePayment(false, () => {
+      // Patient closed the Flutterwave popup without completing payment — restore their answers.
+      const saved = localStorage.getItem("privydoc_pending_intake");
+      if (saved) {
+        const data = JSON.parse(saved);
+        setPhase1Answers(data.phase1Answers);
+        setIntakeAnswers(data.phase2Answers);
+        setShowFinalPaymentSummary(true);
+        setCheckoutStep("form");
+      }
+    });
   };
 
   // Render Red Flags Emergency Page

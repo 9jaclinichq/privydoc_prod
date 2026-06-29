@@ -231,7 +231,7 @@ export default function AdaptiveIntakeForm({
   // Helper to render controls for a single active question
   const renderQuestion = (q: IntakeQuestion) => {
     return (
-      <div key={q.id} className="w-full flex flex-col justify-start">
+      <div key={q.id} className="w-full flex flex-col justify-start pb-24 md:pb-0">
         {/* Label and Autoload Lock Info */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase font-mono tracking-wider bg-neutral-900 text-[#C9A84C] px-2 py-1 rounded">

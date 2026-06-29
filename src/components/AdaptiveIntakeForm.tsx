@@ -392,21 +392,29 @@ export default function AdaptiveIntakeForm({
           {/* TEXT INPUT */}
           {q.type === "text" && (
             q.category === "demographics" ? (
-              <input
-                type="text"
-                disabled={!!q.autoLoad}
-                value={
-                  answers[q.id] ||
-                  (q.autoLoad === "name" ? patientName : "") ||
-                  (q.autoLoad === "age" ? patientAge : "") ||
-                  (q.autoLoad === "state" ? patientState : "") ||
-                  (q.autoLoad === "phone" ? patientPhone : "") ||
-                  ""
-                }
-                onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
-                placeholder="Please type your response here..."
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
-              />
+              q.autoLoad ? (
+                <input
+                  type="text"
+                  disabled
+                  value={
+                    q.autoLoad === "name" ? patientName :
+                    q.autoLoad === "age" ? String(patientAge) :
+                    q.autoLoad === "state" ? patientState :
+                    q.autoLoad === "phone" ? patientPhone : ""
+                  }
+                  className="w-full px-4 py-3 bg-neutral-900/50 border
+                  border-[#C9A84C]/50 rounded-xl text-[#C9A84C] text-sm
+                  font-medium opacity-100"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={answers[q.id] || ""}
+                  onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                  placeholder="Please type your response here..."
+                  className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+                />
+              )
             ) : (
               <textarea
                 disabled={!!q.autoLoad}

@@ -16,8 +16,6 @@ interface SymptomCheckerProps {
   setSymptomAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onCancel: () => void;
   onStartIntake: (condition: any) => void;
-  showAdvice: boolean;
-  setShowAdvice: (v: boolean) => void;
 }
 
 const URGENCY_STYLES: Record<QuickCheckInsight["urgency"], { label: string; className: string }> = {
@@ -31,14 +29,21 @@ export default function SymptomChecker({
   symptomAnswers,
   setSymptomAnswers,
   onCancel,
-  onStartIntake,
-  showAdvice,
-  setShowAdvice
+  onStartIntake
 }: SymptomCheckerProps) {
-  const categoryQuestions = INTAKE_QUESTIONS.filter(q => q.category === selectedCondition.id);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const track = selectedCondition.id;
+  const categoryQuestions = INTAKE_QUESTIONS.filter(q => q.category === track);
+
+  // Per-track state so progress/results from one condition never bleed into another
+  const [trackIndex, setTrackIndex] = useState<Record<string, number>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiResult, setAiResult] = useState<QuickCheckInsight | null>(null);
+  const [completedTracks, setCompletedTracks] = useState<Record<string, boolean>>({});
+  const [trackResults, setTrackResults] = useState<Record<string, QuickCheckInsight>>({});
+
+  const currentIndex = trackIndex[track] || 0;
+  const setCurrentIndex = (i: number) => setTrackIndex(prev => ({ ...prev, [track]: i }));
+  const isComplete = completedTracks[track] || false;
+  const aiResult = trackResults[track] || null;
 
   const currentQuestion = categoryQuestions[currentIndex];
   const progressPercent = categoryQuestions.length > 0
@@ -52,16 +57,19 @@ export default function SymptomChecker({
       const res = await fetch("/api/gemini/quick-check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ track: selectedCondition.id, answers })
+        body: JSON.stringify({ track, answers })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setAiResult({
-          headline: data.headline,
-          insights: data.insights,
-          recommendation: data.recommendation,
-          urgency: data.urgency
-        });
+        setTrackResults(prev => ({
+          ...prev,
+          [track]: {
+            headline: data.headline,
+            insights: data.insights,
+            recommendation: data.recommendation,
+            urgency: data.urgency
+          }
+        }));
       } else {
         toast.error("Could not generate your insight. Please try the full doctor review.");
       }
@@ -70,7 +78,7 @@ export default function SymptomChecker({
       toast.error("Could not generate your insight. Please try the full doctor review.");
     } finally {
       setIsAnalyzing(false);
-      setShowAdvice(true);
+      setCompletedTracks(prev => ({ ...prev, [track]: true }));
     }
   };
 
@@ -92,7 +100,7 @@ export default function SymptomChecker({
   };
 
   // AI Analysis Result Screen
-  if (showAdvice) {
+  if (isComplete) {
     const urgency = aiResult?.urgency || "routine";
     const urgencyStyle = URGENCY_STYLES[urgency];
     return (
@@ -145,10 +153,18 @@ export default function SymptomChecker({
 
         <button
           onClick={() => {
-            setShowAdvice(false);
-            setAiResult(null);
+            setCompletedTracks(prev => ({ ...prev, [track]: false }));
+            setTrackResults(prev => {
+              const next = { ...prev };
+              delete next[track];
+              return next;
+            });
             setCurrentIndex(0);
-            setSymptomAnswers({});
+            setSymptomAnswers(prev => {
+              const next = { ...prev };
+              categoryQuestions.forEach(q => delete next[q.id]);
+              return next;
+            });
           }}
           className="w-full text-center text-xs font-bold text-zinc-500 hover:text-zinc-400 py-2 block transition-colors"
         >

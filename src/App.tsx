@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, BellOff, MapPin, Check, ChevronUp, ChevronDown } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -14,6 +14,7 @@ import PatientPortal from "./components/PatientPortal";
 import { validateTemplatePlaceholders } from "./templates";
 import { ToastContainer, toast } from "./components/ToastNotification";
 import { ConfirmModal } from "./components/ConfirmModal";
+import NotificationPanel, { AppNotification } from "./components/NotificationPanel";
 
 const ClinicianArea = React.lazy(() => import("./components/ClinicianArea"));
 const AdminOffice = React.lazy(() => import("./components/AdminOffice"));
@@ -31,14 +32,12 @@ export default function App() {
   // Navigation / Role selection states
   const [activeTab, setActiveTab] = useState<"patient" | "clinician" | "admin">("patient");
   const [patientSubView, setPatientSubView] = useState<"landing" | "register" | "otp" | "pinSetup" | "login" | "symptom" | "intake" | "portal">("landing");
-  const [showHiddenRoles, setShowHiddenRoles] = useState(false);
-  const [logoClicks, setLogoClicks] = useState(0);
 
   // Compliance and Alert Pre-Permissions states
-  const [permissionModal, setPermissionModal] = useState<"location" | "notifications" | null>(null);
+  const [permissionModal, setPermissionModal] = useState<"location" | null>(null);
   const [pendingCondition, setPendingCondition] = useState<typeof MEN_HEALTH_CONDITIONS[0] | null>(null);
   const [skipWelcomeBack, setSkipWelcomeBack] = useState(false);
-  const [geoCheckState, setGeoCheckState] = useState<"ask" | "outside" | "denied">("ask");
+  const [geoCheckState, setGeoCheckState] = useState<"ask" | "outside">("ask");
 
   // Patient session / authentication states
   const [patientSession, setPatientSession] = useState<Patient | null>(() => {
@@ -78,7 +77,6 @@ export default function App() {
   // Patient states
   const [selectedCondition, setSelectedCondition] = useState<typeof MEN_HEALTH_CONDITIONS[0] | null>(null);
   const [symptomAnswers, setSymptomAnswers] = useState<Record<string, string>>({});
-  const [showAdvice, setShowAdvice] = useState(false);
   const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({});
   const [patientName, setPatientName] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
@@ -106,7 +104,10 @@ export default function App() {
   // PWA deferredPrompt and showPwaBanner states
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
-  const [showNotifInstructions, setShowNotifInstructions] = useState(false);
+
+  // In-app notification bell states
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   // Clinician states
   const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(() => {
@@ -217,10 +218,8 @@ export default function App() {
 
     if (hash === "#admin" || path === "/admin") {
       setActiveTab("admin");
-      setShowHiddenRoles(true);
     } else if (path === "/doctor" || hash === "#doctor" || hash === "#clinician") {
       setActiveTab("clinician");
-      setShowHiddenRoles(true);
     } else {
       // Priority: admin > doctor > patient
       const adminSessionSaved = localStorage.getItem("privydoc_admin_session") === "true";
@@ -229,14 +228,26 @@ export default function App() {
 
       if (adminSessionSaved) {
         setActiveTab("admin");
-        setShowHiddenRoles(true);
       } else if (doctorSessionSaved) {
         setActiveTab("clinician");
-        setShowHiddenRoles(true);
       } else if (patientSessionSaved) {
         setActiveTab("patient");
       }
     }
+  }, []);
+
+  // Hidden admin route: navigating to #admin (even after initial mount) reveals the admin login
+  useEffect(() => {
+    function checkHashRoute() {
+      const hash = window.location.hash;
+      if (hash === "#admin") {
+        history.replaceState(null, "", window.location.pathname);
+        setActiveTab("admin");
+      }
+    }
+    checkHashRoute();
+    window.addEventListener("hashchange", checkHashRoute);
+    return () => window.removeEventListener("hashchange", checkHashRoute);
   }, []);
 
   // Restore pending payment if any on app mount
@@ -361,49 +372,6 @@ export default function App() {
     setShowPwaBanner(false);
   };
 
-  const handleNotifDismiss = () => {
-    localStorage.setItem("privydoc_notif_deferred", Date.now().toString());
-    const countStr = localStorage.getItem("privydoc_notif_dismiss_count");
-    const count = countStr ? parseInt(countStr, 10) : 0;
-    localStorage.setItem("privydoc_notif_dismiss_count", (count + 1).toString());
-    setPermissionModal(null);
-    setShowNotifInstructions(false);
-  };
-
-  // Browser Notification Trigger Logic
-  useEffect(() => {
-    if (patientSubView === "portal" && patientSession && !isPatientSessionLocked) {
-      if (typeof window !== "undefined" && "Notification" in window) {
-        // If granted, do nothing
-        if (Notification.permission === "granted") return;
-
-        // Check deferral / dismissal count
-        const dismissedTimeStr = localStorage.getItem("privydoc_notif_deferred");
-        const dismissCountStr = localStorage.getItem("privydoc_notif_dismiss_count");
-        const dismissCount = dismissCountStr ? parseInt(dismissCountStr, 10) : 0;
-
-        // After 3 dismissals, stop asking permanently.
-        if (dismissCount >= 3) return;
-
-        if (dismissedTimeStr) {
-          const dismissedTime = parseInt(dismissedTimeStr, 10);
-          const now = Date.now();
-          const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-          const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-
-          if (dismissCount === 1 && now - dismissedTime < threeDaysMs) {
-            return;
-          }
-          if (dismissCount === 2 && now - dismissedTime < sevenDaysMs) {
-            return;
-          }
-        }
-
-        // Trigger the modal!
-        setPermissionModal("notifications");
-      }
-    }
-  }, [patientSubView, patientSession, isPatientSessionLocked]);
 
   // Inactivity / Background TTL Lock (30 minutes)
   useEffect(() => {
@@ -540,6 +508,100 @@ export default function App() {
 
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
+  // Fetch in-app notifications for the currently logged-in patient or doctor
+  const fetchNotifications = async () => {
+    try {
+      if (patientSession) {
+        const res = await fetch(`/api/data/notifications?recipient_type=eq.patient&recipient_id=eq.${encodeURIComponent(patientSession.phone)}&order=created_at.desc`, {
+          headers: { "x-patient-phone": patientSession.phone }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setNotifications(data);
+        }
+      } else if (currentDoctor) {
+        const res = await fetch(`/api/data/notifications?recipient_type=eq.doctor&recipient_id=eq.${encodeURIComponent(currentDoctor.id)}&order=created_at.desc`, {
+          headers: { "x-doctor-id": currentDoctor.id }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setNotifications(data);
+        }
+      } else {
+        setNotifications([]);
+      }
+    } catch (e) {
+      console.error("Failed to load notifications:", e);
+    }
+  };
+
+  // Poll notifications every 60 seconds while a patient or doctor session is active
+  useEffect(() => {
+    if (!patientSession && !currentDoctor) {
+      setNotifications([]);
+      return;
+    }
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [patientSession, currentDoctor]);
+
+  const handleMarkNotificationRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (patientSession) headers["x-patient-phone"] = patientSession.phone;
+      if (currentDoctor) headers["x-doctor-id"] = currentDoctor.id;
+      await fetch(`/api/data/notifications?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ read: true })
+      });
+    } catch (e) {
+      console.error("Failed to mark notification read:", e);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (patientSession) headers["x-patient-phone"] = patientSession.phone;
+      if (currentDoctor) headers["x-doctor-id"] = currentDoctor.id;
+      await Promise.all(unreadIds.map(id =>
+        fetch(`/api/data/notifications?id=eq.${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ read: true })
+        })
+      ));
+    } catch (e) {
+      console.error("Failed to mark all notifications read:", e);
+    }
+  };
+
+  const unreadNotificationCount = notifications.filter(n => !n.read).length;
+
+  // Discreet long-press on the logo (2s hold) routes to clinician login
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
+  const handleLogoTouchStart = () => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setActiveTab("clinician");
+    }, 2000);
+  };
+  const handleLogoTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const switchRoleSafely = (targetRole: "patient" | "clinician" | "admin", successAction: () => void) => {
     successAction();
   };
@@ -555,15 +617,20 @@ export default function App() {
     setPatientSubView("portal");
   };
 
-  // Welcome-back safety net: auto-redirect logged-in patients to the portal after 2s of inaction
+  // On initial load, a logged-in patient lands directly on their portal dashboard rather
+  // than the visitor landing page. The "Welcome back" screen only appears afterwards if
+  // they explicitly navigate back past the portal (e.g. via the browser back button).
   useEffect(() => {
-    if (patientSubView === "landing" && patientSession && !skipWelcomeBack) {
-      const timer = setTimeout(() => {
-        enterVault();
-      }, 2000);
-      return () => clearTimeout(timer);
+    const patientSessionSaved = localStorage.getItem("privydoc_patient_session");
+    const adminSessionSaved = localStorage.getItem("privydoc_admin_session") === "true";
+    const doctorSessionSaved = localStorage.getItem("privydoc_doctor_session");
+    const pendingPayment = localStorage.getItem("privydoc_pending_payment");
+
+    if (patientSessionSaved && !adminSessionSaved && !doctorSessionSaved && !pendingPayment && window.location.hash !== "#admin") {
+      setActiveTab("patient");
+      enterVault();
     }
-  }, [patientSubView, patientSession, skipWelcomeBack]);
+  }, []);
 
   // Symptom checker selector
   const handleSymptomSelect = (conditionId: string) => {
@@ -576,12 +643,15 @@ export default function App() {
     }
   };
 
-  // Check whether the patient has already passed the MDCN Nigeria geolocation check
+  // Check whether the patient has already self-declared Nigeria residence within the last 30 days
   const isGeoVerified = (): boolean => {
     try {
       const raw = localStorage.getItem("privydoc_geo_verified");
       if (!raw) return false;
-      return !!JSON.parse(raw).verified;
+      const data = JSON.parse(raw);
+      if (!data.verified) return false;
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      return Date.now() - (data.timestamp || 0) < THIRTY_DAYS_MS;
     } catch {
       return false;
     }
@@ -729,7 +799,7 @@ export default function App() {
         customizations: {
           title: "PrivyDoc Nigeria",
           description: `Telehealth Consultation - ${selectedCondition.title}`,
-          logo: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE_sQb7BdupWIHOsK8rFyescGBIm0uzBIaRznUP7VGfzjICziVOWkNTZBqIt-t3HGbVcIOu5rl9QDV8XwK3KKUqiLc81E3qfvATTD8QhwgPjOPx"
+          logo: "https://app.privydoc.com.ng/pwa_logo.svg"
         },
         callback: async (response: any) => {
           const transaction_id = response.transaction_id || response.id;
@@ -846,7 +916,6 @@ export default function App() {
     const key = searchPhone.toLowerCase().trim();
     if (key === "doctor" || key === "clinician") {
       switchRoleSafely("clinician", () => {
-        setShowHiddenRoles(true);
         setActiveTab("clinician");
         setSearchPhone("");
       });
@@ -854,7 +923,6 @@ export default function App() {
     }
     if (key === "admin" || key === "root") {
       switchRoleSafely("admin", () => {
-        setShowHiddenRoles(true);
         setActiveTab("admin");
         setSearchPhone("");
       });
@@ -1454,24 +1522,23 @@ export default function App() {
         <header className="border-b border-zinc-900/80 bg-black/85 backdrop-blur sticky top-0 z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           
           {/* Custom Gold Brand Logo */}
-          <button 
-            onClick={() => { 
+          <button
+            onClick={() => {
+              if (longPressTriggered.current) {
+                longPressTriggered.current = false;
+                return;
+              }
               switchRoleSafely("patient", () => {
-                setActiveTab("patient"); 
-                setPatientSubView("landing"); 
-                setSelectedCase(null); 
-              });
-              setLogoClicks(prev => {
-                const next = prev + 1;
-                if (next >= 5) {
-                  setShowHiddenRoles(p => !p);
-                  return 0;
-                }
-                return next;
+                setActiveTab("patient");
+                setPatientSubView("landing");
+                setSelectedCase(null);
               });
             }}
+            onTouchStart={handleLogoTouchStart}
+            onTouchEnd={handleLogoTouchEnd}
+            onMouseDown={handleLogoTouchStart}
+            onMouseUp={handleLogoTouchEnd}
             className="focus:outline-none text-left select-none cursor-pointer"
-            title="Tap 5 times to toggle clinician & admin consoles"
           >
             <Logo className="h-9" />
           </button>
@@ -1510,21 +1577,34 @@ export default function App() {
             >
               Clinician Area {currentDoctor && <span className="w-1.5 h-1.5 rounded-full bg-[#E5C158] animate-pulse" />}
             </button>
-            <button
-              onClick={() => {
-                switchRoleSafely("admin", () => {
-                  setActiveTab("admin");
-                });
-              }}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === "admin" 
-                  ? "bg-rose-600/10 text-rose-400 border border-rose-500/15" 
-                  : "text-zinc-500 hover:text-rose-400"
-              }`}
-            >
-              Admin Office {isAdminAuthenticated && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />}
-            </button>
           </nav>
+
+          {/* In-App Notification Bell (logged-in patients & doctors only) */}
+          {((activeTab === "patient" && patientSession) || (activeTab === "clinician" && currentDoctor)) && (
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifPanel(p => !p)}
+                className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-950 border border-zinc-900 text-zinc-400 hover:text-[#E5C158] transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#d4af37] text-black text-[9px] font-extrabold flex items-center justify-center">
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+              {showNotifPanel && (
+                <NotificationPanel
+                  notifications={notifications}
+                  onMarkRead={handleMarkNotificationRead}
+                  onMarkAllRead={handleMarkAllNotificationsRead}
+                  onClose={() => setShowNotifPanel(false)}
+                  formatDate={formatDate}
+                />
+              )}
+            </div>
+          )}
         </header>
 
         {/* RENDER STAGE FRAMEWORK */}
@@ -1583,7 +1663,6 @@ export default function App() {
                   switchRoleSafely("clinician", () => {
                     setActiveTab("clinician");
                     setDocView("login");
-                    setShowHiddenRoles(true);
                   });
                 }}
               />
@@ -2125,8 +2204,6 @@ export default function App() {
                 setSymptomAnswers={setSymptomAnswers}
                 onCancel={() => setPatientSubView("landing")}
                 onStartIntake={handleStartIntake}
-                showAdvice={showAdvice}
-                setShowAdvice={setShowAdvice}
               />
             )}
 
@@ -2202,6 +2279,7 @@ export default function App() {
                 setPatientMessage={setPatientMessage}
                 onSendPatientMessage={handleSendPatientMsg}
                 onStartNewCase={() => setPatientSubView("landing")}
+                onSelectNewCondition={handleStartIntake}
                 formatDate={formatDate}
                 formatNaira={formatNaira}
                 onLogout={handlePatientLogout}
@@ -2314,7 +2392,7 @@ export default function App() {
       <footer className="border-t border-zinc-900/40 bg-zinc-950/20 py-3.5 px-4 text-center text-[9px] text-zinc-600 font-mono selection:bg-transparent">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-left">
           <p className="text-center md:text-left">
-            © {new Date().getFullYear()} <span className="cursor-pointer hover:text-zinc-400 transition-colors select-none font-bold" onClick={() => setShowHiddenRoles(p => !p)}>PrivyDoc</span> • <span className="text-zinc-500 font-sans font-medium">Verified Telehealth</span>
+            © {new Date().getFullYear()} <span className="font-bold">PrivyDoc</span> • <span className="text-zinc-500 font-sans font-medium">Verified Telehealth</span>
           </p>
           <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-zinc-500 text-[9.5px]">
             <button onClick={() => setLegalModalOpen("privacy")} className="hover:text-zinc-300 transition-colors">Privacy Policy</button>
@@ -2396,7 +2474,7 @@ export default function App() {
         <div className="relative max-w-md w-full bg-zinc-950 border border-zinc-900 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl overflow-hidden text-zinc-200">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#d4af37] to-[#b8860b]" />
           
-          {permissionModal === "location" ? (
+          {(
             geoCheckState === "outside" ? (
               <>
                 <div className="text-center space-y-3">
@@ -2409,23 +2487,11 @@ export default function App() {
                   <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
                     PrivyDoc services are currently only available to patients physically located in Nigeria as required by MDCN guidelines.
                   </p>
+                  <p className="text-xs text-zinc-500 leading-relaxed font-sans">
+                    Questions? Contact us at <strong className="text-zinc-300">help@privydoc.com.ng</strong>.
+                  </p>
                 </div>
                 <div className="space-y-3 pt-2">
-                  <button
-                    onClick={() => {
-                      localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: true, timestamp: Date.now() }));
-                      setPermissionModal(null);
-                      setGeoCheckState("ask");
-                      if (pendingCondition) {
-                        const cond = pendingCondition;
-                        setPendingCondition(null);
-                        proceedWithIntake(cond);
-                      }
-                    }}
-                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5"
-                  >
-                    I am in Nigeria
-                  </button>
                   <button
                     onClick={() => {
                       setPermissionModal(null);
@@ -2438,240 +2504,46 @@ export default function App() {
                   </button>
                 </div>
               </>
-            ) : geoCheckState === "denied" ? (
-              <>
-                <div className="text-center space-y-3">
-                  <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                    <MapPin className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    LOCATION ACCESS NEEDED
-                  </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                    We couldn't verify your location. Under MDCN guidelines, PrivyDoc consultations are restricted to patients physically located in Nigeria. You can grant location access again, or self-declare your residence below.
-                  </p>
-                </div>
-                <div className="space-y-3 pt-2">
-                  <button
-                    onClick={() => {
-                      localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: true, timestamp: Date.now() }));
-                      setPermissionModal(null);
-                      setGeoCheckState("ask");
-                      if (pendingCondition) {
-                        const cond = pendingCondition;
-                        setPendingCondition(null);
-                        proceedWithIntake(cond);
-                      }
-                    }}
-                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5"
-                  >
-                    I am in Nigeria
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPermissionModal(null);
-                      setPendingCondition(null);
-                      setGeoCheckState("ask");
-                    }}
-                    className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
-                  >
-                    Cancel Consultation
-                  </button>
-                </div>
-              </>
             ) : (
             <>
               <div className="text-center space-y-3">
                 <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                  <MapPin className="w-6 h-6 animate-pulse" />
+                  <MapPin className="w-6 h-6" />
                 </div>
                 <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   MDCN CLINICAL COMPLIANCE CHECK
                 </h3>
-                <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
-                  Jurisdiction Audit
-                </span>
                 <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                  Under clinical guidelines established by the <strong className="text-zinc-300">Medical and Dental Council of Nigeria (MDCN)</strong> for telemedicine, physicians are strictly licensed to evaluate patients physically residing in Nigeria.
-                </p>
-                <p className="text-xs text-zinc-400 leading-relaxed font-sans">
-                  PrivyDoc requires a secure, one-time geographical check before initiating your private consultation dossier. Your precise coordinates are never stored or logged permanently.
+                  PrivyDoc services are licensed by MDCN for patients physically residing in Nigeria.
                 </p>
               </div>
 
               <div className="space-y-3 pt-2">
                 <button
                   onClick={() => {
-                    if (navigator.geolocation) {
-                      navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                          const { latitude, longitude } = pos.coords;
-                          const inNigeria = latitude >= 4.0 && latitude <= 14.0 && longitude >= 2.7 && longitude <= 15.0;
-
-                          if (inNigeria) {
-                            localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: false, timestamp: Date.now() }));
-                            setPermissionModal(null);
-                            setGeoCheckState("ask");
-                            if (pendingCondition) {
-                              const cond = pendingCondition;
-                              setPendingCondition(null);
-                              proceedWithIntake(cond);
-                            }
-                          } else {
-                            setGeoCheckState("outside");
-                          }
-                        },
-                        (err) => {
-                          console.warn("Location permission denied", err);
-                          setGeoCheckState("denied");
-                        }
-                      );
-                    } else {
-                      setGeoCheckState("denied");
+                    localStorage.setItem("privydoc_geo_verified", JSON.stringify({ verified: true, selfDeclared: true, timestamp: Date.now() }));
+                    setPermissionModal(null);
+                    setGeoCheckState("ask");
+                    if (pendingCondition) {
+                      const cond = pendingCondition;
+                      setPendingCondition(null);
+                      proceedWithIntake(cond);
                     }
                   }}
-                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5"
                 >
-                  Authorize Compliance Check <Check className="w-4 h-4" />
+                  I am currently in Nigeria — Continue
                 </button>
                 <button
-                  onClick={() => {
-                    setPermissionModal(null);
-                    setPendingCondition(null);
-                    setGeoCheckState("ask");
-                  }}
-                  className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
+                  onClick={() => setGeoCheckState("outside")}
+                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300 font-bold text-xs rounded-xl transition-colors border border-zinc-800"
                 >
-                  Cancel Consultation
+                  I am outside Nigeria
                 </button>
               </div>
             </>
             )
-          ) : (() => {
-            const isNotifDenied = typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied";
-            if (isNotifDenied) {
-              return (
-                <>
-                  <div className="text-center space-y-3">
-                    <div className="w-14 h-14 bg-red-500/10 text-red-400 border border-red-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-red-500/5 animate-pulse">
-                      <BellOff className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      ENABLE NOTIFICATIONS
-                    </h3>
-                    <span className="inline-block px-2.5 py-0.5 bg-red-500/5 text-red-400 text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-red-500/10">
-                      Settings Config Required
-                    </span>
-                    <p className="text-xs text-zinc-300 leading-relaxed font-sans pt-1">
-                      To receive case updates, enable notifications for PrivyDoc in your browser settings.
-                    </p>
-
-                    {showNotifInstructions && (
-                      <div className="text-left bg-black/50 border border-zinc-900 rounded-2xl p-4.5 space-y-4 text-xs text-zinc-400 mt-4 max-h-[220px] overflow-y-auto">
-                        <div className="space-y-1.5">
-                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Google Chrome / Android</p>
-                          <p className="pl-1.5 border-l border-zinc-800">Tap the Lock icon next to the URL, select <strong className="text-zinc-300">Permissions</strong> or <strong className="text-zinc-300">Site settings</strong>, and change Notifications to <strong className="text-[#d4af37]">Allow</strong>.</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Apple Safari / iOS</p>
-                          <p className="pl-1.5 border-l border-zinc-800">Add PrivyDoc to your Home Screen first. Then open your device <strong className="text-zinc-300">Settings &gt; Notifications &gt; PrivyDoc</strong>, and toggle <strong className="text-[#d4af37]">Allow Notifications</strong> on.</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[#d4af37] font-bold text-[11px] uppercase tracking-wider font-mono">Mozilla Firefox</p>
-                          <p className="pl-1.5 border-l border-zinc-800">Click the permissions Shield icon to the left of the address bar, clear any blocked status, and reload the page.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    {!showNotifInstructions ? (
-                      <>
-                        <button
-                          onClick={() => setShowNotifInstructions(true)}
-                          className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
-                        >
-                          Show Me How <Info className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={handleNotifDismiss}
-                          className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
-                        >
-                          Maybe Later
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            setPermissionModal(null);
-                            setShowNotifInstructions(false);
-                          }}
-                          className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
-                        >
-                          Done <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setShowNotifInstructions(false)}
-                          className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
-                        >
-                          Back
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </>
-              );
-            }
-
-            return (
-              <>
-                <div className="text-center space-y-3">
-                  <div className="w-14 h-14 bg-amber-500/10 text-[#d4af37] border border-amber-500/15 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/5">
-                    <Bell className="w-6 h-6 animate-pulse" />
-                  </div>
-                  <h3 className="text-lg font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    SECURE MEDICAL ALERT SYSTEM
-                  </h3>
-                  <span className="inline-block px-2.5 py-0.5 bg-amber-500/5 text-[#E5C158] text-[8px] uppercase tracking-widest font-mono font-bold rounded-full border border-[#d4af37]/10">
-                    Encrypted Push Channel
-                  </span>
-                  <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                    Get instant alerts when your doctor responds to your case — usually within 24 hours.
-                  </p>
-                  <div className="text-left bg-black/40 border border-zinc-900 rounded-xl p-3 space-y-1.5 text-[10.5px] text-zinc-400">
-                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Claims your diagnostic folder file</p>
-                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Asks vital follow-up screening questions</p>
-                    <p className="flex gap-2 items-center"><strong className="text-[#E5C158]">•</strong> Issues signed pharmacotherapy prescriptions</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <button
-                    onClick={() => {
-                      if ("Notification" in window) {
-                        Notification.requestPermission().then((permission) => {
-                          console.log("Notification permission:", permission);
-                          setPermissionModal(null);
-                        });
-                      } else {
-                        setPermissionModal(null);
-                      }
-                    }}
-                    className="w-full py-3 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/5 flex items-center justify-center gap-2"
-                  >
-                    Enable Alerts <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleNotifDismiss}
-                    className="w-full py-2.5 bg-transparent hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-400 font-bold text-xs rounded-xl transition-colors"
-                  >
-                    Maybe Later
-                  </button>
-                </div>
-              </>
-            );
-          })()}
+          )}
         </div>
       </div>
     )}

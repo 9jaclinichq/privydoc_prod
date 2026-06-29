@@ -5,6 +5,7 @@ import path from "path";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { createHash } from "crypto";
+import { Resend } from "resend";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -591,9 +592,47 @@ function normPhone(phone: string): string {
 // In-memory fallback for development or when database is offline
 const devOtpStore: Record<string, { code_hash: string; expires_at: number }> = {};
 
+// Send a one-time verification code to a patient's email via Resend
+async function sendEmailOtp(email: string, code: string): Promise<boolean> {
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (!resendApiKey) {
+    console.error("RESEND_API_KEY not configured; cannot send email OTP.");
+    return false;
+  }
+
+  try {
+    const resend = new Resend(resendApiKey);
+    const { error } = await resend.emails.send({
+      from: "PrivyDoc <verify@privydoc.com.ng>",
+      to: email,
+      subject: "Your PrivyDoc Verification Code",
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#0a0a0a;color:#ffffff;border-radius:12px">
+          <img src="https://app.privydoc.com.ng/pwa_logo.svg" width="48" style="margin-bottom:16px"/>
+          <h2 style="color:#C9A84C;margin:0 0 8px">PrivyDoc Verification</h2>
+          <p style="color:#aaa;margin:0 0 24px">Your one-time verification code is:</p>
+          <div style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#C9A84C;text-align:center;padding:16px;background:#1a1a1a;border-radius:8px;margin-bottom:24px">${code}</div>
+          <p style="color:#666;font-size:12px">This code expires in 10 minutes. Do not share it with anyone.</p>
+          <p style="color:#666;font-size:12px">If you did not request this code, please ignore this email.</p>
+        </div>
+      `
+    });
+
+    if (error) {
+      console.error("Resend email OTP send failed:", error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Resend email OTP exception:", e);
+    return false;
+  }
+}
+
 // 1. WhatsApp OTP Send endpoint
 app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OTP requests. Please wait."), async (req, res) => {
-  const { phone } = req.body;
+  const { phone, email, channel } = req.body;
+  const otpChannel: "whatsapp" | "email" | "both" = channel === "email" || channel === "both" ? channel : "whatsapp";
   if (!phone) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
   }
@@ -763,7 +802,16 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
       console.log(`[SECURE AUTH OTP Fallback] Stored OTP for +${sanitizedPhone} in memory (Hashed: ${code_hash})`);
     }
 
-    // F. Dispatch OTP via WhatsApp Cloud API / Termii fallbacks
+    // F. Dispatch OTP via email (Resend), if requested
+    let emailDispatchSuccess = false;
+    if ((otpChannel === "email" || otpChannel === "both") && email) {
+      emailDispatchSuccess = await sendEmailOtp(email, code);
+      if (!emailDispatchSuccess) {
+        console.error(`Failed to dispatch email OTP to ${email}`);
+      }
+    }
+
+    // G. Dispatch OTP via WhatsApp Cloud API / Termii fallbacks
     let dispatchSuccess = false;
     let fallbackUsed = "none";
 
@@ -771,7 +819,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
     const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const termiiKey = process.env.TERMII_API_KEY;
 
-    if (waToken && waPhoneId) {
+    if ((otpChannel === "whatsapp" || otpChannel === "both") && waToken && waPhoneId) {
       try {
         const waResponse = await fetch(`https://graph.facebook.com/v17.0/${waPhoneId}/messages`, {
           method: "POST",
@@ -826,7 +874,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
     }
 
     // Termii fallback if WhatsApp was not configured or failed
-    if (!dispatchSuccess && termiiKey) {
+    if ((otpChannel === "whatsapp" || otpChannel === "both") && !dispatchSuccess && termiiKey) {
       try {
         const termiiResponse = await fetch("https://api.ng.termii.com/api/sms/send", {
           method: "POST",
@@ -852,7 +900,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
     }
 
     // Output code securely to console log for testing/dev environments
-    console.log(`[SECURE AUTH OTP] Verification code for +${sanitizedPhone} is: ${code} (Hashed: ${code_hash}). Dispatch Channel: ${fallbackUsed}`);
+    console.log(`[SECURE AUTH OTP] Verification code for +${sanitizedPhone} is: ${code} (Hashed: ${code_hash}). Requested Channel: ${otpChannel}. WhatsApp/SMS Dispatch: ${fallbackUsed}. Email Dispatch: ${emailDispatchSuccess ? "sent" : "not sent"}`);
 
     res.json({
       ok: true,

@@ -1645,8 +1645,7 @@ app.post("/api/payment/verify", async (req, res, next) => {
       const consId = "cons_" + Math.random().toString(36).substr(2, 9);
       const symptoms = raw_answers.map((ans: any) => `${ans.question}: ${ans.answer}`);
 
-      // Call custom ai-summary edge function with 15s AbortController and local fallback
-      let aiSummary = "Processing clinical safety sweep and brief...";
+      // Generate clinical summary directly via Gemini (in-process, no Supabase Edge Function)
       let redFlag = false;
       let redFlagSource = null;
 
@@ -1660,39 +1659,11 @@ app.post("/api/payment/verify", async (req, res, next) => {
         redFlagSource = "intake";
       }
 
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        const aiSummaryRes = await fetch(`${supabaseUrl}/functions/v1/ai-summary`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseServiceKey}`
-          },
-          body: JSON.stringify({
-            condition: condition_title,
-            form_data: { answers: raw_answers }
-          }),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
-
-        if (aiSummaryRes.ok) {
-          const aiData = await aiSummaryRes.json();
-          aiSummary = aiData.summary || aiSummary;
-          if (aiData.red_flag) {
-            redFlag = true;
-            redFlagSource = redFlagSource || "ai";
-          }
-        } else {
-          console.warn("AI summary edge function returned error status, using local clinical fallback.");
-          aiSummary = `CLINICAL BRIEF (LOCAL FALLBACK): Patient is a ${patient_age}-year-old reporting ${condition_title} for ${duration || "unspecified period"}. Verify raw answers for contraindications before prescribing.`;
-        }
-      } catch (err: any) {
-        console.warn("AI summary sweep timed out or failed, using local clinical fallback:", err);
-        aiSummary = `CLINICAL BRIEF (LOCAL FALLBACK): Patient is a ${patient_age}-year-old reporting ${condition_title} for ${duration || "unspecified period"}. Verify raw answers for contraindications before prescribing.`;
+      const summaryResult = await generateClinicalSummary({ patient_age, condition_title, duration, raw_answers, track: condition_title });
+      let aiSummary = summaryResult.summary;
+      if (summaryResult.red_flag) {
+        redFlag = true;
+        redFlagSource = redFlagSource || "ai";
       }
 
       const clientConsultation = {
@@ -1872,47 +1843,147 @@ function checkDoctorLimit(doctorId: string): boolean {
   return true;
 }
 
-// API endpoint for AI Summary (Proxy to Supabase Edge Function: ai-summary)
-app.post(
-  "/api/ai-summary", 
-  rateLimiter("aiSummary", 15, 3 * 60 * 1000, "Too many AI summaries requested. Please wait."), 
-  async (req, res) => {
-    try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+// Shared clinical summary generator — calls Gemini directly (replaces the old Supabase
+// "ai-summary" Edge Function call). Used by both /api/ai/generate-summary and /api/payment/verify.
+async function generateClinicalSummary(params: {
+  patient_age?: number | string;
+  condition_title?: string;
+  duration?: string;
+  raw_answers?: { question: string; answer: string }[];
+  track?: string;
+}): Promise<{ summary: string; red_flag: boolean }> {
+  const { patient_age, condition_title, duration, raw_answers, track } = params;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const fallbackSummary = `CLINICAL BRIEF (LOCAL FALLBACK): Patient is a ${patient_age || "unspecified-age"} reporting ${condition_title || track || "condition"} for ${duration || "unspecified period"}. Verify raw answers for contraindications before prescribing.`;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/ai-summary`, {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey) {
+    console.warn("GEMINI_API_KEY not configured; returning local fallback clinical summary.");
+    return { summary: fallbackSummary, red_flag: false };
+  }
+
+  const intakeFormatted = Array.isArray(raw_answers)
+    ? raw_answers.map((ans) => `- ${ans.question || "Question"}: ${ans.answer || "Not specified"}`).join("\n")
+    : "None provided";
+
+  const systemPrompt = `You are an expert clinical decision support assistant for PrivyDoc, a confidential men's telemedicine platform in Nigeria.
+
+Analyze the patient's complete intake responses and generate a structured clinical summary for the reviewing physician in this exact JSON format:
+
+{
+  "summary": "2-3 sentence clinical overview mentioning age, condition, duration, key risk factors",
+  "presenting_complaint": "One sentence description of the main presenting complaint",
+  "key_findings": ["finding 1", "finding 2", "finding 3"],
+  "risk_factors": ["risk 1", "risk 2"],
+  "shim_score": null or { "score": number, "severity": "Mild|Moderate|Severe|No ED" },
+  "red_flag": false,
+  "red_flag_reasons": [],
+  "suggested_approach": "One paragraph of evidence-based management suggestions for the doctor to consider. Not a prescription. For doctor review only.",
+  "differential_considerations": ["possible 1", "possible 2"],
+  "contraindication_alert": null or "specific warning"
+}
+
+Rules:
+- red_flag true ONLY for: active chest pain, nitrate use with ED, recent MI/stroke <6 months, priapism, suicidal ideation, testicular torsion symptoms
+- suggested_approach must end with: "All management decisions remain with the reviewing clinician."
+- Use Nigerian clinical context where relevant
+- Never use patient-facing language — this is for the doctor only
+- Respond with valid JSON only, no markdown`;
+
+  const userPrompt = `Patient Age: ${patient_age || "unspecified"}
+Condition: ${condition_title || track || "unspecified"}
+Duration: ${duration || "unspecified"}
+Intake Answers:
+${intakeFormatted}
+
+Analyze the above intake and return the clinical brief and safety check boolean.`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${supabaseServiceKey}`
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          condition: req.body.condition,
-          form_data: req.body.form_data
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }]
         }),
         signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Supabase Edge Function responded with status ${response.status}: ${errorText}`);
       }
+    );
+    clearTimeout(timeoutId);
 
-      const data = await response.json();
-      res.json({ summary: data.summary, red_flag: data.red_flag });
-    } catch (error: any) {
-      console.error("AI Summary Proxy failed or timed out, triggering fallback:", error);
-      res.json({ 
-        summary: `CLINICAL BRIEF (LOCAL FALLBACK): Patient reports history of ${req.body.condition || "condition"}. Verify raw questionnaires to rule out cardiac contraindications before issuing prescriptions.`,
-        red_flag: false
-      });
+    if (!geminiRes.ok) {
+      throw new Error(`Gemini API responded with status ${geminiRes.status}: ${await geminiRes.text()}`);
     }
+
+    const geminiData = await geminiRes.json();
+    const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const jsonStart = rawText.indexOf("{");
+    const jsonEnd = rawText.lastIndexOf("}");
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error("Gemini response did not contain valid JSON.");
+    }
+    const parsed = JSON.parse(rawText.substring(jsonStart, jsonEnd + 1));
+
+    const parts: string[] = [];
+    if (parsed.summary) parts.push(`SUMMARY:\n${parsed.summary}`);
+    if (parsed.presenting_complaint) parts.push(`PRESENTING COMPLAINT:\n${parsed.presenting_complaint}`);
+    if (Array.isArray(parsed.key_findings) && parsed.key_findings.length > 0) {
+      parts.push(`KEY FINDINGS:\n${parsed.key_findings.map((f: string) => `- ${f}`).join("\n")}`);
+    }
+    if (Array.isArray(parsed.risk_factors) && parsed.risk_factors.length > 0) {
+      parts.push(`RISK FACTORS:\n${parsed.risk_factors.map((r: string) => `- ${r}`).join("\n")}`);
+    }
+    if (parsed.shim_score) {
+      const shim = typeof parsed.shim_score === "object" && parsed.shim_score !== null
+        ? `Score: ${parsed.shim_score.score}, Severity: ${parsed.shim_score.severity}`
+        : String(parsed.shim_score);
+      parts.push(`SHIM SCORE:\n${shim}`);
+    }
+    if (parsed.suggested_approach) parts.push(`SUGGESTED CLINICAL APPROACH:\n${parsed.suggested_approach}`);
+    if (Array.isArray(parsed.differential_considerations) && parsed.differential_considerations.length > 0) {
+      parts.push(`DIFFERENTIAL CONSIDERATIONS:\n${parsed.differential_considerations.map((d: string) => `- ${d}`).join("\n")}`);
+    }
+    if (parsed.contraindication_alert) parts.push(`⚠ CONTRAINDICATION ALERT:\n${parsed.contraindication_alert}`);
+
+    const formattedSummary = parts.join("\n\n");
+    return {
+      summary: formattedSummary || parsed.summary || "Clinical details submitted. Please review answers manually.",
+      red_flag: !!parsed.red_flag
+    };
+  } catch (err) {
+    console.warn("Clinical summary Gemini call failed, using local fallback:", err);
+    return { summary: fallbackSummary, red_flag: false };
+  }
+}
+
+// API endpoint for AI Summary generation (Express + Gemini — replaces the Supabase Edge Function)
+app.post(
+  "/api/ai/generate-summary",
+  rateLimiter("aiSummary", 15, 3 * 60 * 1000, "Too many AI summaries requested. Please wait."),
+  async (req, res) => {
+    const { patient_age, condition_title, duration, raw_answers, track } = req.body;
+    const result = await generateClinicalSummary({ patient_age, condition_title, duration, raw_answers, track });
+    res.json({ ok: true, ...result });
+  }
+);
+
+// Legacy route kept for the local-fallback consultation path in src/lib/api.ts
+app.post(
+  "/api/ai-summary",
+  rateLimiter("aiSummary", 15, 3 * 60 * 1000, "Too many AI summaries requested. Please wait."),
+  async (req, res) => {
+    const { condition, form_data } = req.body;
+    const result = await generateClinicalSummary({
+      condition_title: condition,
+      patient_age: form_data?.age,
+      duration: form_data?.duration,
+      raw_answers: form_data?.answers
+    });
+    res.json(result);
   }
 );
 

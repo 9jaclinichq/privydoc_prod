@@ -88,10 +88,10 @@ export default function AdaptiveIntakeForm({
         [currentQuestion.id]: autoValue
       }));
 
-      // Auto-advance after 1 second
+      // Auto-advance after delay (1500ms to allow state update to render on mobile)
       const timer = setTimeout(() => {
         handleNext();
-      }, 1000);
+      }, 1500);
 
       return () => clearTimeout(timer);
     }
@@ -395,7 +395,14 @@ export default function AdaptiveIntakeForm({
               <input
                 type="text"
                 disabled={!!q.autoLoad}
-                value={answers[q.id] || ""}
+                value={
+                  answers[q.id] ||
+                  (q.autoLoad === "name" ? patientName : "") ||
+                  (q.autoLoad === "age" ? patientAge : "") ||
+                  (q.autoLoad === "state" ? patientState : "") ||
+                  (q.autoLoad === "phone" ? patientPhone : "") ||
+                  ""
+                }
                 onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
                 placeholder="Please type your response here..."
                 className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"

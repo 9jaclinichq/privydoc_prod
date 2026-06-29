@@ -1,20 +1,38 @@
 {
-  "hosting": {
-    "site": "privydoc-500414",
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "run": {
-          "serviceId": "privydoc-app",
-          "region": "europe-west2"
+  "hosting": [
+    {
+      "target": "app",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "privydoc-app",
+            "region": "europe-west2"
+          }
         }
-      }
-    ]
-  }
+      ]
+    },
+    {
+      "target": "redirect",
+      "public": "public-redirect",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "**",
+          "destination": "https://app.privydoc.com.ng",
+          "type": 301
+        }
+      ]
+    }
+  ]
 }

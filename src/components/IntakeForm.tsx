@@ -9,6 +9,7 @@ import { pricingApi } from "../lib/api";
 import { toast } from "./ToastNotification";
 import AdaptiveIntakeForm from "./AdaptiveIntakeForm";
 import PrePaymentSummary from "./PrePaymentSummary";
+import FinalPaymentSummary from "./FinalPaymentSummary";
 import EmergencyPage from "./EmergencyPage";
 
 interface IntakeFormProps {
@@ -19,6 +20,7 @@ interface IntakeFormProps {
   setPatientAge: (age: string) => void;
   patientPhone: string;
   setPatientPhone: (phone: string) => void;
+  patientEmail: string;
   intakeAnswers: Record<string, string>;
   setIntakeAnswers: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   checkoutStep: "form" | "payment" | "success" | "red_flag";
@@ -38,6 +40,7 @@ export default function IntakeForm({
   setPatientAge,
   patientPhone,
   setPatientPhone,
+  patientEmail,
   intakeAnswers,
   setIntakeAnswers,
   checkoutStep,
@@ -56,11 +59,13 @@ export default function IntakeForm({
   const [intakePhase, setIntakePhase] = useState<1 | 2>(1);
   const [phase1Answers, setPhase1Answers] = useState<Record<string, any> | null>(null);
   const [showPrePaymentSummary, setShowPrePaymentSummary] = useState(false);
+  const [showFinalPaymentSummary, setShowFinalPaymentSummary] = useState(false);
+  const [pendingFinalAnswers, setPendingFinalAnswers] = useState<Record<string, string> | null>(null);
   const [showEmergencyPage, setShowEmergencyPage] = useState(false);
   const [emergencyMessages, setEmergencyMessages] = useState<string[]>([]);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  // Simulated Flutterwave / Bypass payment confirmation to unlock Phase 2
+  // Simulated Flutterwave / Bypass payment confirmation to unlock Phase 2 (resume-payment screen only)
   const handlePaymentSuccess = () => {
     setIsProcessingPayment(true);
     toast.info("Processing secure payment transaction via Flutterwave...");
@@ -70,6 +75,14 @@ export default function IntakeForm({
       setIntakePhase(2);
       setCheckoutStep("form");
     }, 1200);
+  };
+
+  // Patient confirms final summary and triggers the real Flutterwave payment + doctor submission
+  const handleFinalPaymentProceed = () => {
+    if (pendingFinalAnswers) {
+      setIntakeAnswers(pendingFinalAnswers);
+    }
+    onCompletePayment();
   };
 
   // Render Red Flags Emergency Page
@@ -86,23 +99,34 @@ export default function IntakeForm({
     );
   }
 
-  // Render Pre-Payment Clinical Summary
+  // Render Mid-Assessment Summary (after Phase 1, before Phase 2)
   if (checkoutStep === "form" && showPrePaymentSummary) {
     return (
-      <PrePaymentSummary 
+      <PrePaymentSummary
         track={selectedCondition.id}
         answers={phase1Answers || {}}
         onProceedToPayment={() => {
           setShowPrePaymentSummary(false);
-          setCheckoutStep("payment");
+          setIntakePhase(2);
         }}
         onGoBack={() => setShowPrePaymentSummary(false)}
       />
     );
   }
 
+  // Render Final Payment Summary (after Phase 2 + consent, before real Flutterwave payment)
+  if (checkoutStep === "form" && showFinalPaymentSummary) {
+    return (
+      <FinalPaymentSummary
+        conditionTitle={selectedCondition.title}
+        isProcessing={isSubmittingIntake}
+        onProceedToPayment={handleFinalPaymentProceed}
+      />
+    );
+  }
+
   // Render Phase 1 or Phase 2 Adaptive Intake Form
-  if (checkoutStep === "form" && !showPrePaymentSummary && !showEmergencyPage) {
+  if (checkoutStep === "form" && !showPrePaymentSummary && !showFinalPaymentSummary && !showEmergencyPage) {
     return (
       <div className="space-y-4 max-w-[480px] mx-auto animate-fade-in" id="adaptive-flow-container">
         <div className="flex justify-between items-center px-2 py-1" id="adaptive-flow-header">
@@ -135,10 +159,10 @@ export default function IntakeForm({
             for (const [key, val] of Object.entries(mergedAnswers)) {
               raw[key] = Array.isArray(val) ? val.join(", ") : String(val);
             }
-            setIntakeAnswers(raw);
-            // Trigger existing onCompletePayment flow
-            onCompletePayment();
+            setPendingFinalAnswers(raw);
+            setShowFinalPaymentSummary(true);
           }}
+          onCancel={onCancel}
           onRedFlagTriggered={(messages) => {
             setEmergencyMessages(messages);
             setShowEmergencyPage(true);

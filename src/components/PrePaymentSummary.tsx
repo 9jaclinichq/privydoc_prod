@@ -75,11 +75,6 @@ export default function PrePaymentSummary({
           {cta}
         </p>
 
-        <div className="flex justify-between items-center bg-neutral-900/40 border border-neutral-900 px-4 py-3 rounded-xl" id="price-display-box">
-          <span className="text-xs font-mono text-neutral-400">Consultation Fee</span>
-          <span className="text-white font-mono font-bold text-base">₦7,500</span>
-        </div>
-
         <div className="space-y-3 pt-1">
           <button
             type="button"
@@ -87,7 +82,7 @@ export default function PrePaymentSummary({
             className="w-full bg-[#C9A84C] text-black hover:bg-[#b0913e] py-3.5 rounded-xl text-sm font-semibold font-mono tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-[#C9A84C]/10"
             id="btn-proceed-to-payment"
           >
-            <span>Proceed to Payment</span>
+            <span>Continue Full Assessment</span>
             <ChevronRight className="w-4 h-4" />
           </button>
 
@@ -103,7 +98,7 @@ export default function PrePaymentSummary({
         </div>
 
         <p className="text-[10px] text-neutral-500 text-center leading-relaxed font-sans">
-          Your answers are saved. You will complete the full assessment after payment.
+          Your answers are saved. Payment is requested after you complete the full clinical assessment.
         </p>
       </div>
 

@@ -18,6 +18,7 @@ interface AdaptiveIntakeFormProps {
   onPhase1Complete: (answers: Record<string, any>) => void;
   onPhase2Complete: (answers: Record<string, any>) => void;
   onRedFlagTriggered: (messages: string[]) => void;
+  onCancel?: () => void;
   phase1Answers?: Record<string, any>; // pre-loaded when resuming Phase 2
 }
 
@@ -31,6 +32,7 @@ export default function AdaptiveIntakeForm({
   onPhase1Complete,
   onPhase2Complete,
   onRedFlagTriggered,
+  onCancel,
   phase1Answers = {}
 }: AdaptiveIntakeFormProps) {
   // Initialize answers with pre-loaded phase 1 answers if available
@@ -47,6 +49,12 @@ export default function AdaptiveIntakeForm({
     message: string;
     pendingAnswerKey: string;
     pendingAnswerValue: any;
+  } | null>(null);
+
+  // Consent Decline Explanation state
+  const [consentDeclineModal, setConsentDeclineModal] = useState<{
+    isOpen: boolean;
+    questionId: string;
   } | null>(null);
 
   // Base list of questions based on current phase and track
@@ -168,6 +176,10 @@ export default function AdaptiveIntakeForm({
     const ans = answers[currentQuestion.id];
     if (ans === undefined || ans === null) return false;
 
+    if (currentQuestion.category === "consent") {
+      return ans === true;
+    }
+
     if (currentQuestion.type === "multi") {
       return Array.isArray(ans) && ans.length > 0;
     }
@@ -245,13 +257,42 @@ export default function AdaptiveIntakeForm({
           )}
         </div>
 
-        {/* Question Text */}
-        <h2 className="text-lg font-medium text-white mb-6 leading-relaxed" id={`q-text-${q.id}`}>
-          {q.text}
-        </h2>
+        {/* CONSENT QUESTION CARD */}
+        {q.category === "consent" ? (
+          <div className="bg-neutral-900/60 border border-[#C9A84C]/30 rounded-2xl p-5 space-y-5" id={`consent-card-${q.id}`}>
+            <p className="text-sm text-neutral-200 leading-relaxed">
+              {q.text}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => handleAnswerChange(q.id, true, q.category)}
+                className={`py-3 rounded-xl border text-sm font-semibold transition-all ${
+                  answers[q.id] === true
+                    ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#C9A84C]"
+                    : "border-[#C9A84C]/60 bg-[#C9A84C] text-black hover:bg-[#b0913e]"
+                }`}
+              >
+                I Agree
+              </button>
+              <button
+                type="button"
+                onClick={() => setConsentDeclineModal({ isOpen: true, questionId: q.id })}
+                className="py-3 rounded-xl border border-neutral-700 bg-neutral-800 text-neutral-300 text-sm font-semibold hover:bg-neutral-700 transition-all"
+              >
+                I Do Not Agree
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Question Text */}
+            <h2 className="text-lg font-medium text-white mb-6 leading-relaxed" id={`q-text-${q.id}`}>
+              {q.text}
+            </h2>
 
-        {/* Answer Controls */}
-        <div className="space-y-3" id={`q-controls-${q.id}`}>
+            {/* Answer Controls */}
+            <div className="space-y-3" id={`q-controls-${q.id}`}>
           
           {/* SINGLE SELECT */}
           {q.type === "single" && q.options && (
@@ -462,7 +503,9 @@ export default function AdaptiveIntakeForm({
             </div>
           )}
 
-        </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -550,7 +593,44 @@ export default function AdaptiveIntakeForm({
                 onClick={declineRedFlag}
                 className="w-full bg-neutral-900 hover:bg-neutral-800 text-neutral-300 py-2.5 rounded-xl text-sm font-medium transition-all"
               >
-                Go back and correct
+                Let me correct my answer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Consent Decline Explanation Modal */}
+      {consentDeclineModal && consentDeclineModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 bg-[#C9A84C]/15 border border-[#C9A84C]/30 text-[#C9A84C] rounded-full flex items-center justify-center mx-auto mb-2">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-white font-semibold text-lg">This Consent Is Required</h3>
+            <p className="text-sm text-neutral-300 leading-relaxed">
+              PrivyDoc can only operate safely as a telemedicine service if every patient understands and accepts how the platform works, how their health information is handled, and what to do in an emergency. Without this consent, a doctor cannot safely review your case, so we're unable to continue your assessment.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleAnswerChange(consentDeclineModal.questionId, true, "consent");
+                  setConsentDeclineModal(null);
+                }}
+                className="w-full bg-[#C9A84C] hover:bg-[#b0913e] text-black py-2.5 rounded-xl text-sm font-semibold transition-all"
+              >
+                I Understand and Agree
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConsentDeclineModal(null);
+                  onCancel?.();
+                }}
+                className="w-full bg-neutral-900 hover:bg-neutral-800 text-neutral-300 py-2.5 rounded-xl text-sm font-medium transition-all"
+              >
+                Exit Assessment
               </button>
             </div>
           </div>

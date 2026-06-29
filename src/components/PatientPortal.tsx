@@ -23,6 +23,7 @@ interface PatientPortalProps {
   onSendPatientMessage: () => void;
   onStartNewCase: () => void;
   onSelectNewCondition: (condition: typeof MEN_HEALTH_CONDITIONS[0]) => void;
+  onSelectSymptom: (conditionId: string) => void;
   formatDate: (d: string) => string;
   formatNaira: (n: number) => string;
   onLogout?: () => void;
@@ -43,6 +44,7 @@ export default function PatientPortal({
   onSendPatientMessage,
   onStartNewCase,
   onSelectNewCondition,
+  onSelectSymptom,
   formatDate,
   formatNaira,
   onLogout,
@@ -192,12 +194,20 @@ export default function PatientPortal({
                           {cond.title}
                         </h5>
                       </div>
-                      <button
-                        onClick={() => onSelectNewCondition(cond)}
-                        className="self-start px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-[11px] rounded-xl transition-colors"
-                      >
-                        Initiate Intake
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onSelectSymptom(cond.id)}
+                          className="px-2.5 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-700 text-[10.5px] font-bold text-zinc-400 hover:text-white transition-colors"
+                        >
+                          Clinical Guidelines
+                        </button>
+                        <button
+                          onClick={() => onSelectNewCondition(cond)}
+                          className="px-3.5 py-1.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-[11px] rounded-xl transition-colors"
+                        >
+                          Initiate Intake
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -351,52 +361,117 @@ export default function PatientPortal({
               </div>
             )}
 
-            {/* VIEW B: ALL CASES LIST */}
+            {/* VIEW B: ALL CASES LIST — desktop: list on the left, detail on the right */}
             {activeSidebarTab === "cases" && (
-              <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 animate-fade-in">
-                <h4 className="text-sm font-bold text-white border-b border-zinc-900 pb-2.5 flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <Clock className="w-4 h-4 text-[#d4af37]" /> Active & Archive Consultations
-                </h4>
-                
-                {allCases.length > 0 ? (
-                  <div className="space-y-3">
-                    {allCases.map((c) => (
-                      <div 
-                        key={c.id}
-                        onClick={() => { setSelectedCase(c); setActiveSidebarTab("dashboard"); }}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center text-xs ${
-                          selectedCase?.id === c.id 
-                            ? "bg-[#d4af37]/5 border-[#d4af37]" 
-                            : "bg-black border-zinc-900 hover:border-zinc-800"
-                        }`}
-                      >
-                        <div>
-                          <h5 className="font-bold text-zinc-200">{c.condition}</h5>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">ID: {c.id} • Filed: {formatDate(c.created_at)}</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in items-start">
+                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
+                  <h4 className="text-sm font-bold text-white border-b border-zinc-900 pb-2.5 flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    <Clock className="w-4 h-4 text-[#d4af37]" /> Active & Archive Consultations
+                  </h4>
+
+                  {allCases.length > 0 ? (
+                    <div className="space-y-3">
+                      {allCases.map((c) => (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCase(c);
+                            // On mobile/tablet there's no side-by-side detail panel, so jump to the dashboard view.
+                            if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                              setActiveSidebarTab("dashboard");
+                            }
+                          }}
+                          className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center text-xs ${
+                            selectedCase?.id === c.id
+                              ? "bg-[#d4af37]/5 border-[#d4af37]"
+                              : "bg-black border-zinc-900 hover:border-zinc-800"
+                          }`}
+                        >
+                          <div>
+                            <h5 className="font-bold text-zinc-200">{c.condition}</h5>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">ID: {c.id} • Filed: {formatDate(c.created_at)}</p>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono tracking-widest font-extrabold uppercase ${
+                            c.status === "completed" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                          }`}>
+                            {c.status}
+                          </span>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono tracking-widest font-extrabold uppercase ${
-                          c.status === "completed" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                        }`}>
-                          {c.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 bg-black rounded-xl border border-zinc-900 flex justify-between items-center text-xs">
-                    <div>
-                      <h5 className="font-bold text-zinc-200">{selectedCase?.condition}</h5>
-                      <p className="text-[10px] text-zinc-500 mt-0.5">Filed: {selectedCase ? formatDate(selectedCase.created_at) : "N/A"}</p>
+                      ))}
                     </div>
-                    {selectedCase && (
-                      <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono tracking-widest font-extrabold uppercase ${
-                        selectedCase.status === "completed" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-                      }`}>
-                        {selectedCase.status}
-                      </span>
-                    )}
-                  </div>
-                )}
+                  ) : (
+                    <div className="p-4 bg-black rounded-xl border border-zinc-900 flex justify-between items-center text-xs">
+                      <div>
+                        <h5 className="font-bold text-zinc-200">{selectedCase?.condition}</h5>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Filed: {selectedCase ? formatDate(selectedCase.created_at) : "N/A"}</p>
+                      </div>
+                      {selectedCase && (
+                        <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono tracking-widest font-extrabold uppercase ${
+                          selectedCase.status === "completed" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                        }`}>
+                          {selectedCase.status}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop-only case detail panel */}
+                <div className="hidden lg:block bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
+                  {!selectedCase ? (
+                    <div className="text-center py-10 space-y-2">
+                      <ClipboardCheck className="w-8 h-8 text-zinc-700 mx-auto" />
+                      <p className="text-xs text-zinc-500">Select a case from the list to view details here.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-start gap-4 border-b border-zinc-900 pb-3">
+                        <div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            selectedCase.red_flag
+                              ? "bg-rose-500/15 text-rose-400"
+                              : selectedCase.status === "completed"
+                                ? "bg-emerald-500/15 text-emerald-400"
+                                : selectedCase.status === "active"
+                                  ? "bg-amber-500/15 text-amber-400 animate-pulse"
+                                  : "bg-blue-500/15 text-blue-400"
+                          }`}>
+                            {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
+                          </span>
+                          <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
+                          <p className="text-xs text-zinc-400 mt-1">Consultation ID: {selectedCase.id} • Registered {formatDate(selectedCase.created_at)}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">Assigned Doctor</p>
+                          <p className="font-bold text-white mt-0.5">{selectedCase.doctor_name || "Assigning clinical specialist..."}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-zinc-500 font-mono">Evaluation Fee</p>
+                          <p className="font-bold text-white mt-0.5">{formatNaira(selectedCase.amount_paid)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => !selectedCase.red_flag && setActiveSidebarTab("messages")}
+                          disabled={selectedCase.red_flag}
+                          className="flex-1 px-3.5 py-2 bg-[#d4af37] hover:bg-[#b8860b] text-black font-bold text-xs rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {selectedCase.red_flag ? "Safety Blocked" : "Consult Doctor"}
+                        </button>
+                        <button
+                          onClick={() => setActiveSidebarTab("reports")}
+                          className="flex-1 px-3.5 py-2 border border-zinc-800 hover:border-zinc-700 text-zinc-300 font-bold text-xs rounded-xl transition-all"
+                        >
+                          View Reports/Rx
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 

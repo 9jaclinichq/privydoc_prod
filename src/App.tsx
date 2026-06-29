@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard, Trash2 } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -13,7 +13,7 @@ import IntakeForm from "./components/IntakeForm";
 import PatientPortal from "./components/PatientPortal";
 import { validateTemplatePlaceholders } from "./templates";
 import { ToastContainer, toast } from "./components/ToastNotification";
-import { ConfirmModal } from "./components/ConfirmModal";
+import { ConfirmModal, confirm } from "./components/ConfirmModal";
 import NotificationPanel, { AppNotification } from "./components/NotificationPanel";
 
 const ClinicianArea = React.lazy(() => import("./components/ClinicianArea"));
@@ -1265,14 +1265,75 @@ export default function App() {
     }
   };
 
+  // True while the patient is actively filling out the clinical intake form
+  const isMidIntake = activeTab === "patient" && patientSubView === "intake" && checkoutStep !== "success";
+
+  // Shows the intake-abandonment warning if mid-intake. Returns true if the
+  // caller should proceed with the navigation/action, false if the patient chose to stay.
+  const confirmLeaveIntakeIfNeeded = async (): Promise<boolean> => {
+    if (!isMidIntake) return true;
+    const stay = await confirm(
+      "Your progress will be lost if you leave now. Are you sure you want to cancel this assessment?",
+      { confirmLabel: "Stay", cancelLabel: "Leave Assessment" }
+    );
+    return !stay;
+  };
+
   // Patient Logout
-  const handlePatientLogout = () => {
+  const handlePatientLogout = async () => {
+    if (isMidIntake) {
+      const canLeave = await confirmLeaveIntakeIfNeeded();
+      if (!canLeave) return;
+    } else {
+      const stayLoggedIn = await confirm(
+        "Are you sure you want to log out? Your active session will end.",
+        { confirmLabel: "Stay Logged In", cancelLabel: "Log Out" }
+      );
+      if (stayLoggedIn) return;
+    }
     localStorage.removeItem("privydoc_patient_session");
     setPatientSession(null);
     setSelectedCase(null);
     setSearchPhone("");
     setSkipWelcomeBack(false);
     setPatientSubView("landing");
+  };
+
+  // Permanently delete the patient's account and all consultation records
+  const handleDeleteAccount = async () => {
+    if (!patientSession) return;
+    const confirmed = await confirm(
+      "This will permanently delete your account and all consultation records. This cannot be undone.",
+      { confirmLabel: "Delete My Account", cancelLabel: "Cancel", cancelIsGold: true, danger: true }
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/auth/patient/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: patientSession.phone })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        toast.error(data.message || "Failed to delete account. Please try again.");
+        return;
+      }
+      toast.success("Your account and all consultation records have been permanently deleted.");
+    } catch (e) {
+      console.error("Account deletion failed:", e);
+      toast.error("Failed to delete account. Please try again.");
+    } finally {
+      localStorage.removeItem("privydoc_patient_session");
+      localStorage.removeItem("privydoc_patient_last_active");
+      localStorage.removeItem("privydoc_pending_payment");
+      localStorage.removeItem("privydoc_pending_intake");
+      setPatientSession(null);
+      setSelectedCase(null);
+      setSearchPhone("");
+      setSkipWelcomeBack(false);
+      setPatientSubView("landing");
+    }
   };
 
   // Patient chat send
@@ -1612,7 +1673,11 @@ export default function App() {
             sidebarNavItems.map((item) => (
               <button
                 key={item.label}
-                onClick={() => { item.onClick(); setTabletSidebarOpen(false); }}
+                onClick={async () => {
+                  if (!(await confirmLeaveIntakeIfNeeded())) return;
+                  item.onClick();
+                  setTabletSidebarOpen(false);
+                }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   item.active ? "bg-[#d4af37]/10 text-[#E5C158]" : "text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
                 }`}
@@ -1634,6 +1699,12 @@ export default function App() {
                 className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" /> Log Out
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                className="w-full flex items-center justify-center gap-1.5 py-2 text-rose-500/70 hover:text-rose-400 text-[10px] font-bold transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Account
               </button>
             </>
           ) : activeTab === "clinician" && currentDoctor ? (
@@ -2413,6 +2484,7 @@ export default function App() {
                 onSendPatientMessage={handleSendPatientMsg}
                 onStartNewCase={() => setPatientSubView("landing")}
                 onSelectNewCondition={handleStartIntake}
+                onSelectSymptom={handleSymptomSelect}
                 formatDate={formatDate}
                 formatNaira={formatNaira}
                 onLogout={handlePatientLogout}
@@ -2551,7 +2623,10 @@ export default function App() {
         sidebarNavItems.slice(0, 5).map((item) => (
           <button
             key={item.label}
-            onClick={item.onClick}
+            onClick={async () => {
+              if (!(await confirmLeaveIntakeIfNeeded())) return;
+              item.onClick();
+            }}
             className={`flex flex-col items-center gap-1 px-1.5 py-1 text-[9px] font-bold transition-all ${
               item.active ? "text-[#E5C158]" : "text-zinc-500"
             }`}

@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { AlertTriangle, HelpCircle } from "lucide-react";
 
-interface ConfirmState {
+interface ConfirmOptions {
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  cancelIsGold?: boolean;
+}
+
+interface ConfirmState extends ConfirmOptions {
   isOpen: boolean;
   message: string;
   resolve: (value: boolean) => void;
@@ -10,12 +18,13 @@ interface ConfirmState {
 type ConfirmListener = (state: ConfirmState | null) => void;
 let listener: ConfirmListener | null = null;
 
-export const confirm = (message: string): Promise<boolean> => {
+export const confirm = (message: string, options: ConfirmOptions = {}): Promise<boolean> => {
   return new Promise((resolve) => {
     if (listener) {
       listener({
         isOpen: true,
         message,
+        ...options,
         resolve: (val) => {
           if (listener) listener(null);
           resolve(val);
@@ -56,7 +65,7 @@ export function ConfirmModal() {
             <AlertTriangle className="w-6 h-6" />
           </div>
           <h3 className="text-md font-bold text-white tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            CONFIRM ACTION
+            {state.title || "CONFIRM ACTION"}
           </h3>
           <p className="text-xs text-zinc-400 leading-relaxed font-sans max-w-[260px]">
             {state.message}
@@ -66,15 +75,23 @@ export function ConfirmModal() {
         <div className="flex items-center gap-2.5 pt-1">
           <button
             onClick={() => state.resolve(false)}
-            className="flex-1 py-2.5 bg-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-white font-bold text-xs rounded-xl transition-colors border border-zinc-800 hover:border-zinc-700"
+            className={
+              state.cancelIsGold
+                ? "flex-1 py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/10"
+                : "flex-1 py-2.5 bg-transparent hover:bg-zinc-800/40 text-zinc-400 hover:text-white font-bold text-xs rounded-xl transition-colors border border-zinc-800 hover:border-zinc-700"
+            }
           >
-            Cancel
+            {state.cancelLabel || "Cancel"}
           </button>
           <button
             onClick={() => state.resolve(true)}
-            className="flex-1 py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#d4af37]/10"
+            className={`flex-1 py-2.5 font-extrabold text-xs rounded-xl transition-all shadow-lg ${
+              state.danger
+                ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20"
+                : "bg-[#d4af37] hover:bg-[#b8860b] text-black shadow-[#d4af37]/10"
+            }`}
           >
-            Confirm
+            {state.confirmLabel || "Confirm"}
           </button>
         </div>
       </div>

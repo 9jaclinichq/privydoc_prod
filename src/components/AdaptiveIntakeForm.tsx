@@ -243,7 +243,7 @@ export default function AdaptiveIntakeForm({
   // Helper to render controls for a single active question
   const renderQuestion = (q: IntakeQuestion) => {
     return (
-      <div key={q.id} className="w-full flex flex-col justify-start pb-24 md:pb-0">
+      <div key={q.id} className="w-full flex flex-col justify-start">
         {/* Label and Autoload Lock Info */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase font-mono tracking-wider bg-neutral-900 text-[#C9A84C] px-2 py-1 rounded">
@@ -511,7 +511,7 @@ export default function AdaptiveIntakeForm({
   };
 
   return (
-    <div className="w-full flex flex-col gap-4" id="adaptive-intake-form-outer">
+    <div className="w-full flex flex-col gap-4 pb-24 md:pb-0" id="adaptive-intake-form-outer">
       
       {/* Progress & Header (sticky/above the card) */}
       <div className="mb-2 animate-fade-in relative z-10 px-4 md:px-0" id="intake-header-progress">
@@ -540,8 +540,8 @@ export default function AdaptiveIntakeForm({
         </div>
 
       {/* Navigation Buttons */}
-      <div 
-        className="flex justify-between items-center gap-4 border-t border-neutral-800/40 pt-4 bg-neutral-950/95 backdrop-blur-md px-4 pb-5 pt-4 fixed bottom-0 left-0 right-0 z-30 md:static md:p-0 md:bg-transparent md:border-none md:pt-0 md:z-auto" 
+      <div
+        className="flex justify-between items-center gap-4 border-t border-neutral-800/40 pt-4 bg-neutral-950/95 backdrop-blur-md px-4 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] fixed bottom-0 left-0 right-0 z-30 md:static md:p-0 md:bg-transparent md:border-none md:pt-0 md:z-auto"
         id="intake-navigation-controls"
       >
         <button

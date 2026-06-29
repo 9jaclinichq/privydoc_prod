@@ -1322,6 +1322,49 @@ app.post("/api/auth/patient/reset-pin", async (req, res) => {
   }
 });
 
+// Permanently delete a patient's account and all associated records
+app.delete("/api/auth/patient/account", async (req, res) => {
+  const phone = (req.body && req.body.phone) || (req.query && req.query.phone);
+  if (!phone) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
+  }
+
+  const sanitizedPhone = normPhone(String(phone));
+
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+
+    if (supabaseUrl && supabaseServiceKey) {
+      const headers = {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json"
+      };
+
+      // Delete consultations, notifications, and OTP codes tied to this patient, then the patient row itself.
+      await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/consultations?patient_phone=eq.${sanitizedPhone}`, { method: "DELETE", headers })
+          .catch(e => console.error("Failed to delete patient consultations:", e)),
+        fetch(`${supabaseUrl}/rest/v1/notifications?recipient_type=eq.patient&recipient_id=eq.${sanitizedPhone}`, { method: "DELETE", headers })
+          .catch(e => console.error("Failed to delete patient notifications:", e)),
+        fetch(`${supabaseUrl}/rest/v1/otp_codes?phone=eq.${sanitizedPhone}`, { method: "DELETE", headers })
+          .catch(e => console.error("Failed to delete patient OTP codes:", e))
+      ]);
+
+      const deletePatientRes = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${sanitizedPhone}`, { method: "DELETE", headers });
+      if (!deletePatientRes.ok) {
+        throw new Error(`Failed to delete patient row: ${await deletePatientRes.text()}`);
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Patient account deletion error:", err);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Failed to delete account. Please try again." });
+  }
+});
+
 // Verify clinician folio and phone match before resetting PIN
 app.get("/api/auth/clinician/verify-forgot", async (req, res) => {
   const { mdcn_folio, phone } = req.query;

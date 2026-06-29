@@ -7,6 +7,7 @@ import { INTAKE_QUESTIONS } from "../data";
 import { formatNaira } from "../utils";
 import { pricingApi } from "../lib/api";
 import { toast } from "./ToastNotification";
+import { confirm } from "./ConfirmModal";
 import AdaptiveIntakeForm from "./AdaptiveIntakeForm";
 import PrePaymentSummary from "./PrePaymentSummary";
 import FinalPaymentSummary from "./FinalPaymentSummary";
@@ -155,9 +156,15 @@ export default function IntakeForm({
     return (
       <div className="space-y-4 max-w-[480px] mx-auto animate-fade-in" id="adaptive-flow-container">
         <div className="flex justify-between items-center px-2 py-1" id="adaptive-flow-header">
-          <button 
+          <button
             type="button"
-            onClick={onCancel}
+            onClick={async () => {
+              const stay = await confirm(
+                "Your progress will be lost if you leave now. Are you sure you want to cancel this assessment?",
+                { confirmLabel: "Stay", cancelLabel: "Leave Assessment" }
+              );
+              if (!stay) onCancel();
+            }}
             className="text-xs font-semibold text-zinc-500 hover:text-white flex items-center gap-1 transition-all duration-200 hover:translate-x-[-2px]"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Cancel Clinical Intake

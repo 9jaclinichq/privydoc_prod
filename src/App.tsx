@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -120,6 +120,7 @@ export default function App() {
     }
   });
   const [docView, setDocView] = useState<"login" | "cases" | "wallet">("cases");
+  const [doctorOnlineStatus, setDoctorOnlineStatus] = useState<"online" | "away">("online");
   const [docFolio, setDocFolio] = useState("");
   const [docPin, setDocPin] = useState("");
   const [docRegName, setDocRegName] = useState("");
@@ -154,7 +155,23 @@ export default function App() {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem("privydoc_admin_session") === "true";
   });
-  const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing">("verifications");
+  const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing" | "cases" | "broadcast" | "disputes">("verifications");
+
+  // Lifted patient portal sidebar tab (drives PatientPortal's content area from the app shell)
+  const [patientPortalTab, setPatientPortalTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "newCase">("dashboard");
+
+  // Responsive layout breakpoints
+  const [viewportWidth, setViewportWidth] = useState<number>(() => typeof window !== "undefined" ? window.innerWidth : 1024);
+  const isMobile = viewportWidth < 768;
+  const isTablet = viewportWidth >= 768 && viewportWidth < 1024;
+  const isDesktop = viewportWidth >= 1024;
+  const [tabletSidebarOpen, setTabletSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Inactivity & Success Screen Countdown states
   const [isPatientSessionLocked, setIsPatientSessionLocked] = useState(false);
@@ -1449,8 +1466,46 @@ export default function App() {
     triggerRefresh();
   };
 
+  // Role-aware sidebar/bottom-nav items. Each routes into the existing per-role view state.
+  type NavItem = { label: string; icon: React.ReactNode; active: boolean; onClick: () => void };
+  const sidebarNavItems: NavItem[] = (() => {
+    if (activeTab === "patient" && patientSession) {
+      const goPortal = (tab: typeof patientPortalTab) => {
+        setPatientPortalTab(tab);
+        if (patientSubView !== "portal") enterVault();
+      };
+      return [
+        { label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" />, active: patientPortalTab === "dashboard" && patientSubView === "portal", onClick: () => goPortal("dashboard") },
+        { label: "My Cases", icon: <ListChecks className="w-4 h-4" />, active: patientPortalTab === "cases" && patientSubView === "portal", onClick: () => goPortal("cases") },
+        { label: "Messages", icon: <MessageSquare className="w-4 h-4" />, active: patientPortalTab === "messages" && patientSubView === "portal", onClick: () => goPortal("messages") },
+        { label: "Reports/Rx", icon: <FileText className="w-4 h-4" />, active: patientPortalTab === "reports" && patientSubView === "portal", onClick: () => goPortal("reports") },
+        { label: "New Consultation", icon: <PlusCircle className="w-4 h-4" />, active: patientPortalTab === "newCase" && patientSubView === "portal", onClick: () => goPortal("newCase") }
+      ];
+    }
+    if (activeTab === "clinician" && currentDoctor) {
+      return [
+        { label: "Queue", icon: <Inbox className="w-4 h-4" />, active: docView === "cases", onClick: () => { setSelectedDoctorCase(null); setDocView("cases"); } },
+        { label: "Active Cases", icon: <ListChecks className="w-4 h-4" />, active: docView === "cases", onClick: () => setDocView("cases") },
+        { label: "Messages", icon: <MessageSquare className="w-4 h-4" />, active: docView === "cases", onClick: () => setDocView("cases") },
+        { label: "Earnings", icon: <Wallet className="w-4 h-4" />, active: docView === "wallet", onClick: () => setDocView("wallet") },
+        { label: "Support", icon: <LifeBuoy className="w-4 h-4" />, active: false, onClick: () => { window.location.href = "mailto:help@privydoc.com.ng"; } }
+      ];
+    }
+    if (activeTab === "admin" && isAdminAuthenticated) {
+      return [
+        { label: "Overview", icon: <LayoutDashboard className="w-4 h-4" />, active: adminView === "verifications", onClick: () => setAdminView("verifications") },
+        { label: "Patients", icon: <Users className="w-4 h-4" />, active: adminView === "cases", onClick: () => setAdminView("cases") },
+        { label: "Doctors", icon: <Stethoscope className="w-4 h-4" />, active: adminView === "verifications", onClick: () => setAdminView("verifications") },
+        { label: "Consultations", icon: <Inbox className="w-4 h-4" />, active: adminView === "cases", onClick: () => setAdminView("cases") },
+        { label: "Payouts", icon: <Wallet className="w-4 h-4" />, active: adminView === "payouts", onClick: () => setAdminView("payouts") },
+        { label: "Config", icon: <Settings2 className="w-4 h-4" />, active: adminView === "pricing", onClick: () => setAdminView("pricing") }
+      ];
+    }
+    return [];
+  })();
+
   return (
-    <div className="app-wrap text-[#e4e4e7] selection:bg-[#d4af37]/40 selection:text-white font-sans antialiased">
+    <div className="app-shell text-[#e4e4e7] selection:bg-[#d4af37]/40 selection:text-white font-sans antialiased">
       {isPatientSessionLocked && patientSession && (
         <div className="fixed inset-0 bg-[#06080c]/98 z-[9999] flex items-center justify-center p-6 animate-fade-in" id="scrPinResume">
           <div className="max-w-md w-full bg-zinc-950 border border-zinc-900 rounded-2xl p-8 space-y-6 text-center shadow-2xl relative">
@@ -1515,69 +1570,147 @@ export default function App() {
           </div>
         </div>
       )}
-      <div className="app-side app-side-left"></div>
-      
-      <div className="app-container">
-        {/* GLOBAL LUXURY HEADER */}
-        <header className="border-b border-zinc-900/80 bg-black/85 backdrop-blur sticky top-0 z-40 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-          
-          {/* Custom Gold Brand Logo */}
+      {/* Tablet sidebar scrim */}
+      {sidebarNavItems.length > 0 && isTablet && tabletSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-[90]"
+          onClick={() => setTabletSidebarOpen(false)}
+        />
+      )}
+
+      {/* APP SIDEBAR (tablet: collapsible drawer, desktop: persistent) — only shown when logged in */}
+      {sidebarNavItems.length > 0 && (
+      <div className={`app-sidebar ${tabletSidebarOpen ? "open" : ""}`}>
+        <div className="px-5 py-5 border-b border-zinc-900/80 flex items-center justify-between">
           <button
             onClick={() => {
-              if (longPressTriggered.current) {
-                longPressTriggered.current = false;
-                return;
-              }
               switchRoleSafely("patient", () => {
                 setActiveTab("patient");
                 setPatientSubView("landing");
                 setSelectedCase(null);
               });
+              setTabletSidebarOpen(false);
             }}
-            onTouchStart={handleLogoTouchStart}
-            onTouchEnd={handleLogoTouchEnd}
-            onMouseDown={handleLogoTouchStart}
-            onMouseUp={handleLogoTouchEnd}
             className="focus:outline-none text-left select-none cursor-pointer"
           >
-            <Logo className="h-9" />
+            <Logo className="h-8" />
           </button>
+          {isTablet && (
+            <button
+              onClick={() => setTabletSidebarOpen(false)}
+              className="text-zinc-500 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
 
-          {/* Luxury Navigation Role Switcher */}
-          <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-900">
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {sidebarNavItems.length === 0 ? (
+            <p className="px-2 text-[10px] text-zinc-600 font-mono">No navigation available.</p>
+          ) : (
+            sidebarNavItems.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => { item.onClick(); setTabletSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  item.active ? "bg-[#d4af37]/10 text-[#E5C158]" : "text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+                }`}
+              >
+                {item.icon} {item.label}
+              </button>
+            ))
+          )}
+        </nav>
+
+        {/* Sidebar bottom user info */}
+        <div className="px-4 py-4 border-t border-zinc-900/80 space-y-2.5">
+          {activeTab === "patient" && patientSession ? (
+            <>
+              <p className="text-xs font-bold text-white truncate">{patientSession.name}</p>
+              <p className="text-[10px] text-zinc-500 font-mono">{patientSession.phone}</p>
+              <button
+                onClick={handlePatientLogout}
+                className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Log Out
+              </button>
+            </>
+          ) : activeTab === "clinician" && currentDoctor ? (
+            <>
+              <p className="text-xs font-bold text-white truncate">Dr. {currentDoctor.name}</p>
+              <button
+                onClick={() => setDoctorOnlineStatus(s => s === "online" ? "away" : "online")}
+                className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold rounded-lg border transition-colors ${
+                  doctorOnlineStatus === "online"
+                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                    : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${doctorOnlineStatus === "online" ? "bg-emerald-400 animate-pulse" : "bg-zinc-500"}`} />
+                {doctorOnlineStatus === "online" ? "Online" : "Away"}
+              </button>
+              <button
+                onClick={() => { setCurrentDoctor(null); setSelectedDoctorCase(null); }}
+                className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Log Out
+              </button>
+            </>
+          ) : activeTab === "admin" && isAdminAuthenticated ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-600/10 border border-rose-500/20 text-rose-400 text-[10px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" /> Admin
+              </span>
+              <button
+                onClick={() => setIsAdminAuthenticated(false)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Log Out
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+      )}
+
+      <div className="app-main">
+        {/* GLOBAL LUXURY HEADER */}
+        <header className="border-b border-zinc-900/80 bg-black/85 backdrop-blur sticky top-0 z-40 px-6 py-4 flex justify-between items-center gap-4">
+
+          <div className="flex items-center gap-3">
+            {/* Hamburger (tablet only — sidebar is collapsible there) */}
+            {isTablet && sidebarNavItems.length > 0 && (
+              <button
+                onClick={() => setTabletSidebarOpen(p => !p)}
+                className="text-zinc-400 hover:text-white p-1.5 -ml-1.5"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+            )}
+
+            {/* Custom Gold Brand Logo */}
             <button
               onClick={() => {
+                if (longPressTriggered.current) {
+                  longPressTriggered.current = false;
+                  return;
+                }
                 switchRoleSafely("patient", () => {
-                  setActiveTab("patient"); 
-                  setPatientSubView("landing"); 
+                  setActiveTab("patient");
+                  setPatientSubView("landing");
                   setSelectedCase(null);
                 });
               }}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === "patient" 
-                  ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
+              onTouchStart={handleLogoTouchStart}
+              onTouchEnd={handleLogoTouchEnd}
+              onMouseDown={handleLogoTouchStart}
+              onMouseUp={handleLogoTouchEnd}
+              className="focus:outline-none text-left select-none cursor-pointer"
             >
-              Patient Vault {patientSession && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+              <Logo className="h-9" />
             </button>
-            <button
-              onClick={() => {
-                switchRoleSafely("clinician", () => {
-                  setActiveTab("clinician"); 
-                  setDocError(""); 
-                  setDocSuccess("");
-                });
-              }}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === "clinician" 
-                  ? "bg-[#d4af37]/10 text-[#E5C158] border border-[#d4af37]/15" 
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              Clinician Area {currentDoctor && <span className="w-1.5 h-1.5 rounded-full bg-[#E5C158] animate-pulse" />}
-            </button>
-          </nav>
+          </div>
 
           {/* In-App Notification Bell (logged-in patients & doctors only) */}
           {((activeTab === "patient" && patientSession) || (activeTab === "clinician" && currentDoctor)) && (
@@ -2284,6 +2417,8 @@ export default function App() {
                 formatNaira={formatNaira}
                 onLogout={handlePatientLogout}
                 patientName={patientSession?.name || ""}
+                activeSidebarTab={patientPortalTab}
+                setActiveSidebarTab={setPatientPortalTab}
               />
             )}
 
@@ -2410,7 +2545,34 @@ export default function App() {
       </footer>
     </div>
 
-    <div className="app-side app-side-right"></div>
+    {/* MOBILE BOTTOM NAVIGATION (< 768px only) */}
+    <div className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-[95] h-16 bg-black/95 backdrop-blur-md border-t border-zinc-900 items-center justify-around px-2">
+      {sidebarNavItems.length > 0 ? (
+        sidebarNavItems.slice(0, 5).map((item) => (
+          <button
+            key={item.label}
+            onClick={item.onClick}
+            className={`flex flex-col items-center gap-1 px-1.5 py-1 text-[9px] font-bold transition-all ${
+              item.active ? "text-[#E5C158]" : "text-zinc-500"
+            }`}
+          >
+            {item.icon}
+            <span className="truncate max-w-[56px]">{item.label}</span>
+          </button>
+        ))
+      ) : (
+        <button
+          onClick={() => {
+            setActiveTab("patient");
+            setPatientSubView("landing");
+          }}
+          className="flex flex-col items-center gap-1 px-1.5 py-1 text-[9px] font-bold text-zinc-500"
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span>Home</span>
+        </button>
+      )}
+    </div>
 
     {/* LEGAL MODALS PORTAL OVERLAY */}
     {legalModalOpen && (

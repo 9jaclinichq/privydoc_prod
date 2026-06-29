@@ -13,8 +13,8 @@ interface AdminOfficeProps {
   setAdminPin: (pin: string) => void;
   isAdminAuthenticated: boolean;
   setIsAdminAuthenticated: (auth: boolean) => void;
-  adminView: "verifications" | "payouts" | "supabase" | "pricing";
-  setAdminView: (v: "verifications" | "payouts" | "supabase" | "pricing") => void;
+  adminView: "verifications" | "payouts" | "supabase" | "pricing" | "cases" | "broadcast" | "disputes";
+  setAdminView: (v: "verifications" | "payouts" | "supabase" | "pricing" | "cases" | "broadcast" | "disputes") => void;
   onAdminLogin: (e: React.FormEvent) => void;
   onAdminVerifyDoctor: (id: string, approve: boolean) => void;
   onAdminApprovePayout: (id: string, approve: boolean) => void;

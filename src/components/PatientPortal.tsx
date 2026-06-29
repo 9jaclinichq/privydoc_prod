@@ -27,6 +27,8 @@ interface PatientPortalProps {
   formatNaira: (n: number) => string;
   onLogout?: () => void;
   patientName?: string;
+  activeSidebarTab: "dashboard" | "cases" | "messages" | "reports" | "newCase";
+  setActiveSidebarTab: (tab: "dashboard" | "cases" | "messages" | "reports" | "newCase") => void;
 }
 
 export default function PatientPortal({
@@ -44,10 +46,10 @@ export default function PatientPortal({
   formatDate,
   formatNaira,
   onLogout,
-  patientName = ""
+  patientName = "",
+  activeSidebarTab,
+  setActiveSidebarTab
 }: PatientPortalProps) {
-  // Sidebar state
-  const [activeSidebarTab, setActiveSidebarTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "payments" | "newCase">("dashboard");
 
   // Dispute states
   const [disputeSubmitted, setDisputeSubmitted] = useState<boolean>(false);
@@ -143,7 +145,7 @@ export default function PatientPortal({
         </div>
       ) : (
         /* 2. GLORIOUS TABLET / LAPTOP SIDEBAR DASHBOARD */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in pb-20 lg:pb-0">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in">
           
           {/* Mobile Top Header (Recommendation 4) */}
           <div className="lg:hidden flex justify-between items-center bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
@@ -165,129 +167,8 @@ export default function PatientPortal({
             </button>
           </div>
 
-          {/* Side Navbar Controls (Desktop View) */}
-          <div className="hidden lg:block lg:col-span-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-6">
-            <div className="pb-4 border-b border-zinc-900 flex justify-between items-center">
-              <div>
-                <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Confidential Portal</p>
-                <h4 className="text-xs font-bold text-[#E5C158] mt-0.5 truncate max-w-[120px]">{selectedCase?.patient_name || patientName || "Confidential Patient"}</h4>
-              </div>
-              <button 
-                onClick={() => {
-                  if (onLogout) {
-                    onLogout();
-                  } else {
-                    setSelectedCase(null);
-                  }
-                }}
-                className="px-2.5 py-1 text-[10px] font-bold border border-zinc-900 rounded-lg text-zinc-400 hover:text-white transition-colors"
-              >
-                Log Out
-              </button>
-            </div>
-
-            <nav className="space-y-1">
-              <button
-                onClick={() => setActiveSidebarTab("dashboard")}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeSidebarTab === "dashboard" 
-                    ? "bg-[#d4af37]/10 text-[#E5C158]" 
-                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
-                }`}
-              >
-                <Activity className="w-4 h-4" /> Dashboard
-              </button>
-              <button
-                onClick={() => setActiveSidebarTab("newCase")}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeSidebarTab === "newCase"
-                    ? "bg-[#d4af37]/10 text-[#E5C158]"
-                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
-                }`}
-              >
-                <ArrowRight className="w-4 h-4" /> Start New Consultation
-              </button>
-              <button
-                onClick={() => setActiveSidebarTab("cases")}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeSidebarTab === "cases" 
-                    ? "bg-[#d4af37]/10 text-[#E5C158]" 
-                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
-                }`}
-              >
-                <Clock className="w-4 h-4" /> My Cases
-              </button>
-              <button
-                onClick={() => setActiveSidebarTab("messages")}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeSidebarTab === "messages" 
-                    ? "bg-[#d4af37]/10 text-[#E5C158]" 
-                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" /> Messages
-              </button>
-              <button
-                onClick={() => setActiveSidebarTab("reports")}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  activeSidebarTab === "reports" 
-                    ? "bg-[#d4af37]/10 text-[#E5C158]" 
-                    : "text-zinc-400 hover:bg-zinc-900/40 hover:text-white"
-                }`}
-              >
-                <FileText className="w-4 h-4" /> Reports / Rx
-              </button>
-            </nav>
-
-            <div className="pt-4 border-t border-zinc-900 text-[10px] text-zinc-500 font-mono space-y-1">
-              <p>Platform Status: SECURE</p>
-              <p>Encryption: AES-256</p>
-              <p>License Status: VERIFIED</p>
-            </div>
-          </div>
-
-          {/* Mobile Sticky Bottom Tab Bar (Recommendation 4) */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-md border-t border-zinc-900 px-4 py-3 flex justify-around items-center">
-            <button
-              onClick={() => setActiveSidebarTab("dashboard")}
-              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
-                activeSidebarTab === "dashboard" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
-              }`}
-            >
-              <Activity className="w-5 h-5" />
-              <span>Dashboard</span>
-            </button>
-            <button
-              onClick={() => setActiveSidebarTab("cases")}
-              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
-                activeSidebarTab === "cases" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
-              }`}
-            >
-              <Clock className="w-5 h-5" />
-              <span>Cases</span>
-            </button>
-            <button
-              onClick={() => setActiveSidebarTab("messages")}
-              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
-                activeSidebarTab === "messages" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
-              }`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span>Messages</span>
-            </button>
-            <button
-              onClick={() => setActiveSidebarTab("reports")}
-              className={`flex flex-col items-center gap-1.5 text-[10px] font-bold transition-all duration-200 ${
-                activeSidebarTab === "reports" ? "text-[#E5C158] scale-[1.05]" : "text-zinc-500"
-              }`}
-            >
-              <FileText className="w-5 h-5" />
-              <span>Reports/Rx</span>
-            </button>
-          </div>
-
-          {/* Center Main Dashboard Panels */}
-          <div className="lg:col-span-9 space-y-8">
+          {/* Center Main Dashboard Panels (navigation now lives in the app-level sidebar) */}
+          <div className="lg:col-span-12 space-y-8">
 
             {/* VIEW NEW CASE: Start New Consultation (inline, stays within the portal) */}
             {activeSidebarTab === "newCase" && (

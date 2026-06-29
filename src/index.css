@@ -81,107 +81,87 @@ body {
   --warn-bg: #2a2010;
 }
 
-/* ── App wrapper: clips scrollbar, branded side panels ── */
-.app-wrap {
+/* ── Root ── */
+#root, body {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  background: #0a0d11;
+}
+
+/* ── App shell ── */
+.app-shell {
   display: flex;
-  justify-content: center;
   width: 100%;
   height: 100vh;
   height: 100dvh;
-  background: #03050a;
+  max-width: 1400px;
+  margin: 0 auto;
   overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.app-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  height: 100vh;
+  height: 100dvh;
+  background: #0f1419;
+  border-right: 1px solid rgba(212,175,90,0.12);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
   position: relative;
 }
 
-/* ── Branded side panels with repeating PrivyDoc watermark ── */
-.app-side {
-  display: none;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: calc(50% - 220px);
-  overflow: hidden;
-  background: linear-gradient(160deg, #080c14 0%, #050810 100%);
-}
-.app-side-left { left: 0; border-right: 1px solid rgba(212,175,90,0.12); }
-.app-side-right { right: 0; border-left: 1px solid rgba(212,175,90,0.12); }
-
-/* Watermark text pattern via SVG data URI background */
-.app-side::before {
+/* Subtle PrivyDoc watermark on the sidebar only */
+.app-sidebar::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='120'%3E%3Ctext x='10' y='40' font-family='Georgia,serif' font-size='13' font-weight='600' fill='%23d4af5a' fill-opacity='0.12' transform='rotate(-35 90 60)'%3EPrivyDoc%3C/text%3E%3Ctext x='10' y='85' font-family='Georgia,serif' font-size='10' fill='%23d4af5a' fill-opacity='0.07' transform='rotate(-35 90 60)'%3EPrivate Men%27s Health%3C/text%3E%3C/svg%3E");
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='120'%3E%3Ctext x='10' y='40' font-family='Georgia,serif' font-size='13' font-weight='600' fill='%23d4af5a' fill-opacity='0.1' transform='rotate(-35 90 60)'%3EPrivyDoc%3C/text%3E%3Ctext x='10' y='85' font-family='Georgia,serif' font-size='10' fill='%23d4af5a' fill-opacity='0.06' transform='rotate(-35 90 60)'%3EPrivate Men%27s Health%3C/text%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 180px 120px;
 }
+.app-sidebar > * { position: relative; z-index: 1; }
 
-/* Gold ambient glow overlay */
-.app-side-left::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 90% 50% at 80% 30%, rgba(212,175,90,0.08), transparent 70%),
-              radial-gradient(ellipse 60% 40% at 20% 80%, rgba(212,175,90,0.04), transparent 60%);
-}
-.app-side-right::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 90% 50% at 20% 40%, rgba(212,175,90,0.08), transparent 70%),
-              radial-gradient(ellipse 60% 40% at 80% 75%, rgba(212,175,90,0.04), transparent 60%);
-}
-
-@media (min-width: 480px) {
-  .app-side { display: block; width: calc(50% - 220px); }
-  .app-side-left { width: calc(50% - 220px); }
-  .app-side-right { width: calc(50% - 220px); }
-}
-@media (min-width: 680px) {
-  .app-side-left { width: calc(50% - 260px); }
-  .app-side-right { width: calc(50% - 260px); }
-}
-@media (min-width: 900px) {
-  .app-side-left { width: calc(50% - 280px); }
-  .app-side-right { width: calc(50% - 280px); }
-}
-@media (min-width: 1200px) {
-  .app-side-left { width: calc(50% - 300px); }
-  .app-side-right { width: calc(50% - 300px); }
-}
-
-/* ── App column: scrolls internally, scrollbar clipped by wrap ── */
-.app-container {
-  width: 100%;
-  max-width: 440px;
+/* ── Main content ── */
+.app-main {
+  flex: 1;
   height: 100vh;
-  height: 100dvh; /* dynamic viewport — accounts for mobile address bar */
-  background: var(--bg);
-  position: relative;
+  height: 100dvh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line2) transparent;
-  flex-shrink: 0;
+  min-width: 0;
 }
-.app-container::-webkit-scrollbar { width: 4px; }
-.app-container::-webkit-scrollbar-track { background: transparent; }
-.app-container::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; }
 
-/* ── App column width at each breakpoint ── */
-@media (min-width: 480px) {
-  .app-container { box-shadow: 0 0 60px rgba(0,0,0,0.8); border-left: 1px solid var(--line2); border-right: 1px solid var(--line2); }
+/* ── Mobile (< 768px): hide sidebar, show bottom nav ── */
+@media (max-width: 767px) {
+  .app-sidebar { display: none; }
+  .app-main { height: calc(100vh - 64px); height: calc(100dvh - 64px); }
+  .mobile-bottom-nav { display: flex; }
 }
-@media (min-width: 680px) {
-  .app-container { max-width: 520px; }
+
+/* ── Tablet (768px - 1023px): collapsible sidebar ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-sidebar {
+    position: fixed;
+    left: -240px;
+    top: 0;
+    transition: left 0.3s ease;
+    z-index: 100;
+  }
+  .app-sidebar.open { left: 0; }
+  .mobile-bottom-nav { display: none; }
 }
-@media (min-width: 900px) {
-  .app-container { max-width: 560px; box-shadow: 0 0 120px rgba(212,175,90,0.07), 0 0 60px rgba(0,0,0,0.9); }
-}
-@media (min-width: 1200px) {
-  .app-container { max-width: 600px; }
+
+/* ── Desktop (>= 1024px): persistent sidebar ── */
+@media (min-width: 1024px) {
+  .app-sidebar { display: flex; }
+  .mobile-bottom-nav { display: none; }
 }
 
 /* Luxury Card Gloss Hover Effect */

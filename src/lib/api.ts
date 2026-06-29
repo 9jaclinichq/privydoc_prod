@@ -1547,6 +1547,10 @@ export const patientApi = {
   },
 
   register: (name: string, phone: string, age: number, state: string, email: string, pin: string): { success: boolean; error?: string; patient?: Patient } => {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return { success: false, error: "A valid email address is required to register." };
+    }
+
     const normalizedPhone = normPhone(phone);
     const patients = patientApi.getAll();
     if (patients.some(p => p.phone === normalizedPhone)) {
@@ -1607,12 +1611,12 @@ export const patientApi = {
     }
   },
 
-  sendOtp: async (phone: string): Promise<{ success: boolean; error?: string; test_bypass?: string }> => {
+  sendOtp: async (phone: string, channel: "whatsapp" | "email" | "both" = "whatsapp", email?: string): Promise<{ success: boolean; error?: string; test_bypass?: string }> => {
     try {
       const res = await fetch("/api/otp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone, channel, email })
       });
       const data = await res.json();
       if (res.ok && data.ok) {

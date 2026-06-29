@@ -57,6 +57,7 @@ export default function App() {
   const [regEmail, setRegEmail] = useState("");
   const [regConsent, setRegConsent] = useState(false);
   const [regOtp, setRegOtp] = useState("");
+  const [otpChannel, setOtpChannel] = useState<"whatsapp" | "email">("whatsapp");
   const [regPin, setRegPin] = useState("");
   const [regPinConfirm, setRegPinConfirm] = useState("");
   const [loginPhone, setLoginPhone] = useState("");
@@ -80,6 +81,7 @@ export default function App() {
   const [patientName, setPatientName] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientAge, setPatientAge] = useState("");
+  const [patientEmail, setPatientEmail] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
   const [selectedCase, setSelectedCase] = useState<Consultation | null>(() => {
     try {
@@ -248,6 +250,7 @@ export default function App() {
           setPatientName(pending.patientName || "");
           setPatientAge(pending.patientAge || "");
           setPatientPhone(pending.patientPhone || "");
+          setPatientEmail(pending.patientEmail || "");
           setIntakeAnswers(pending.intakeAnswers || {});
           if (pending.paymentMethod) setPaymentMethod(pending.paymentMethod);
           setCheckoutStep("payment");
@@ -564,6 +567,7 @@ export default function App() {
       setPatientName(patientSession.name);
       setPatientPhone(patientSession.phone);
       setPatientAge(patientSession.age.toString());
+      setPatientEmail(patientSession.email || "");
       setCheckoutStep("form");
       setPatientSubView("intake");
     } else {
@@ -644,6 +648,7 @@ export default function App() {
       patientName,
       patientAge,
       patientPhone,
+      patientEmail,
       intakeAnswers,
       paymentMethod,
       tx_ref,
@@ -664,7 +669,7 @@ export default function App() {
       console.error("Failed to fetch dynamically configured Flutterwave public key:", e);
     }
 
-    const customerEmail = localStorage.getItem("privydoc_patient_email") || `${patientPhone}@privydoc.com.ng`;
+    const customerEmail = patientEmail || "patient@privydoc.com.ng";
 
     // Open Flutterwave Checkout
     if (typeof (window as any).FlutterwaveCheckout === "function") {
@@ -845,8 +850,15 @@ export default function App() {
   // Patient Registration Submit
   const handlePatientRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName || !regPhone || !regAge || !regState || !regConsent) {
+    if (!regName || !regPhone || !regAge || !regState || !regEmail || !regConsent) {
       toast.warning("Please fill in all clinical registration details and accept the patient consent.");
+      return;
+    }
+
+    // Validate Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(regEmail.trim())) {
+      toast.warning("Please enter a valid email address.");
       return;
     }
 
@@ -873,7 +885,8 @@ export default function App() {
 
     // Call real backend OTP send
     setRegOtp("");
-    const res = await patientApi.sendOtp(regPhone);
+    setOtpChannel("whatsapp");
+    const res = await patientApi.sendOtp(regPhone, "whatsapp", regEmail);
     if (res.success) {
       setPatientSubView("otp");
       if (res.test_bypass) {
@@ -883,6 +896,21 @@ export default function App() {
       }
     } else {
       toast.error(res.error || "Failed to dispatch verification code.");
+    }
+  };
+
+  // Resend OTP via a chosen channel (WhatsApp or Email)
+  const handleResendOtp = async (channel: "whatsapp" | "email") => {
+    setOtpChannel(channel);
+    const res = await patientApi.sendOtp(regPhone, channel, regEmail);
+    if (res.success) {
+      if (res.test_bypass) {
+        toast.info(`Secure OTP Tunnel: code resent. For preview purposes, the code is '${res.test_bypass}'.`);
+      } else {
+        toast.success(`A new verification code has been sent via ${channel === "email" ? "Email" : "WhatsApp"}.`);
+      }
+    } else {
+      toast.error(res.error || "Failed to resend verification code.");
     }
   };
 
@@ -934,6 +962,7 @@ export default function App() {
         setPatientName(res.patient.name);
         setPatientPhone(res.patient.phone);
         setPatientAge(res.patient.age.toString());
+        setPatientEmail(res.patient.email || "");
         setCheckoutStep("form");
         setPatientSubView("intake");
       } else {
@@ -964,6 +993,7 @@ export default function App() {
         setPatientName(res.patient.name);
         setPatientPhone(res.patient.phone);
         setPatientAge(res.patient.age.toString());
+        setPatientEmail(res.patient.email || "");
         setCheckoutStep("form");
         setPatientSubView("intake");
       } else {
@@ -1629,7 +1659,7 @@ export default function App() {
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <label htmlFor="reg-email" className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 font-extrabold flex items-center gap-1">
-                        Email Address (Optional)
+                        Email Address
                         <span className="relative group inline-block">
                           <Info className="w-3 h-3 text-zinc-600 hover:text-[#E5C158] cursor-help transition-colors" />
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block bg-zinc-900 border border-zinc-850 text-zinc-300 text-[9px] py-1 px-2.5 rounded-lg w-52 text-center leading-normal z-50 shadow-2xl">
@@ -1639,15 +1669,16 @@ export default function App() {
                       </label>
                       <span className="text-[9px] text-zinc-600 font-mono">Example: patient@domain.com</span>
                     </div>
-                    <input 
+                    <input
                       id="reg-email"
                       type="email"
+                      required
                       placeholder="e.g. name@example.com"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       className="w-full bg-black border border-zinc-900 focus:border-[#d4af37]/40 rounded-xl px-4 py-3 text-xs text-white focus:outline-none placeholder-zinc-700 transition-colors"
                     />
-                    <p className="text-[9px] text-zinc-600 font-sans">Used to receive secure backup copies of your medical outcomes.</p>
+                    <p className="text-[9px] text-zinc-600 font-sans">Required for OTP verification and secure backup copies of your medical outcomes.</p>
                   </div>
 
                   {/* Consent Checkbox */}
@@ -1689,8 +1720,35 @@ export default function App() {
               <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 space-y-6 shadow-2xl animate-fade-in relative">
                 <div className="absolute top-0 left-0 right-0 h-1 bg-[#d4af37]" />
                 <div className="text-center space-y-2">
-                  <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Verify WhatsApp OTP</h4>
-                  <p className="text-xs text-zinc-500 font-sans">Confidential authentication code dispatched to your WhatsApp number.</p>
+                  <h4 className="text-lg font-bold text-white font-serif" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Verify Your Code</h4>
+                  <p className="text-xs text-zinc-500 font-sans">
+                    Confidential authentication code dispatched via {otpChannel === "email" ? "Email" : "WhatsApp"}.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleResendOtp("whatsapp")}
+                    className={`py-2.5 rounded-xl border text-xs font-bold transition-all ${
+                      otpChannel === "whatsapp"
+                        ? "border-[#d4af37] bg-[#d4af37]/10 text-[#E5C158]"
+                        : "border-zinc-900 bg-black text-zinc-500 hover:border-zinc-800"
+                    }`}
+                  >
+                    Send to WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResendOtp("email")}
+                    className={`py-2.5 rounded-xl border text-xs font-bold transition-all ${
+                      otpChannel === "email"
+                        ? "border-[#d4af37] bg-[#d4af37]/10 text-[#E5C158]"
+                        : "border-zinc-900 bg-black text-zinc-500 hover:border-zinc-800"
+                    }`}
+                  >
+                    Send to Email
+                  </button>
                 </div>
 
                 <form onSubmit={handlePatientOtpSubmit} className="space-y-4">
@@ -1715,8 +1773,27 @@ export default function App() {
                   </button>
                 </form>
 
+                <p className="text-center text-[10px] text-zinc-500 font-mono">
+                  Didn't receive it? Resend via{" "}
+                  <button
+                    type="button"
+                    onClick={() => handleResendOtp("whatsapp")}
+                    className="text-[#E5C158] hover:underline"
+                  >
+                    WhatsApp
+                  </button>
+                  {" "}or{" "}
+                  <button
+                    type="button"
+                    onClick={() => handleResendOtp("email")}
+                    className="text-[#E5C158] hover:underline"
+                  >
+                    Email
+                  </button>
+                </p>
+
                 <div className="text-center">
-                  <button 
+                  <button
                     onClick={() => setPatientSubView("register")}
                     className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors font-mono"
                   >
@@ -1991,6 +2068,7 @@ export default function App() {
                 setPatientAge={setPatientAge}
                 patientPhone={patientPhone}
                 setPatientPhone={setPatientPhone}
+                patientEmail={patientEmail}
                 intakeAnswers={intakeAnswers}
                 setIntakeAnswers={setIntakeAnswers}
                 checkoutStep={checkoutStep}

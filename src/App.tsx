@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard, Trash2 } from "lucide-react";
+import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
 import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
@@ -158,7 +158,7 @@ export default function App() {
   const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing" | "cases" | "broadcast" | "disputes">("verifications");
 
   // Lifted patient portal sidebar tab (drives PatientPortal's content area from the app shell)
-  const [patientPortalTab, setPatientPortalTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "newCase">("dashboard");
+  const [patientPortalTab, setPatientPortalTab] = useState<"dashboard" | "cases" | "messages" | "reports" | "newCase" | "profile">("dashboard");
 
   // Responsive layout breakpoints
   const [viewportWidth, setViewportWidth] = useState<number>(() => typeof window !== "undefined" ? window.innerWidth : 1024);
@@ -1305,6 +1305,30 @@ export default function App() {
     setPatientSubView("landing");
   };
 
+  // Update editable patient profile fields (first name, email, state). Phone is the identity key and is never changed.
+  const handleUpdateProfile = async (updates: { first_name: string; email: string; state: string }) => {
+    if (!patientSession) return;
+    try {
+      const res = await fetch("/api/patient/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: patientSession.phone, ...updates })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        toast.error(data.message || "Failed to update profile. Please try again.");
+        return;
+      }
+      const updatedSession = { ...patientSession, ...data.patient };
+      localStorage.setItem("privydoc_patient_session", JSON.stringify(updatedSession));
+      setPatientSession(updatedSession);
+      toast.success("Profile updated successfully.");
+    } catch (e) {
+      console.error("Profile update failed:", e);
+      toast.error("Failed to update profile. Please try again.");
+    }
+  };
+
   // Permanently delete the patient's account and all consultation records
   const handleDeleteAccount = async () => {
     if (!patientSession) return;
@@ -1546,7 +1570,8 @@ export default function App() {
         { label: "My Cases", icon: <ListChecks className="w-4 h-4" />, active: patientPortalTab === "cases" && patientSubView === "portal", onClick: () => goPortal("cases") },
         { label: "Messages", icon: <MessageSquare className="w-4 h-4" />, active: patientPortalTab === "messages" && patientSubView === "portal", onClick: () => goPortal("messages") },
         { label: "Reports/Rx", icon: <FileText className="w-4 h-4" />, active: patientPortalTab === "reports" && patientSubView === "portal", onClick: () => goPortal("reports") },
-        { label: "New Consultation", icon: <PlusCircle className="w-4 h-4" />, active: patientPortalTab === "newCase" && patientSubView === "portal", onClick: () => goPortal("newCase") }
+        { label: "New Consultation", icon: <PlusCircle className="w-4 h-4" />, active: patientPortalTab === "newCase" && patientSubView === "portal", onClick: () => goPortal("newCase") },
+        { label: "Profile", icon: <Settings2 className="w-4 h-4" />, active: patientPortalTab === "profile" && patientSubView === "portal", onClick: () => goPortal("profile") }
       ];
     }
     if (activeTab === "clinician" && currentDoctor) {
@@ -1705,12 +1730,6 @@ export default function App() {
                 className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" /> Log Out
-              </button>
-              <button
-                onClick={handleDeleteAccount}
-                className="w-full flex items-center justify-center gap-1.5 py-2 text-rose-500/70 hover:text-rose-400 text-[10px] font-bold transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Delete Account
               </button>
             </>
           ) : activeTab === "clinician" && currentDoctor ? (
@@ -2419,8 +2438,9 @@ export default function App() {
 
             {/* Case Demographics & Questionnaires Form */}
             {patientSubView === "intake" && selectedCondition && checkoutStep !== "success" && (
-              <IntakeForm 
+              <IntakeForm
                 selectedCondition={selectedCondition}
+                patientSession={patientSession}
                 patientName={patientName}
                 setPatientName={setPatientName}
                 patientAge={patientAge}
@@ -2495,7 +2515,11 @@ export default function App() {
                 formatNaira={formatNaira}
                 onLogout={handlePatientLogout}
                 onDeleteAccount={handleDeleteAccount}
+                onUpdateProfile={handleUpdateProfile}
                 patientName={patientSession?.name || ""}
+                patientPhone={patientSession?.phone || ""}
+                patientEmail={patientSession?.email || ""}
+                patientState={patientSession?.state || ""}
                 activeSidebarTab={patientPortalTab}
                 setActiveSidebarTab={setPatientPortalTab}
               />
@@ -2686,7 +2710,7 @@ export default function App() {
             {legalModalOpen === "medical" && (
               <>
                 <p>PrivyDoc is strictly for stable, non-emergency conditions. If you are experiencing chest pain, severe breathing issues, or an acute emergency, please proceed immediately to the nearest physical hospital.</p>
-                <p>Consultations are conducted asynchronously using syndromic management protocols. No physical clinical examination is performed. All practitioners are fully licensed with the Medical and Dental Council of Nigeria (MDCN).</p>
+                <p>Consultations are conducted asynchronously using syndromic management protocols. No physical clinical examination is performed. Doctors on this platform are MDCN-licensed. Their practice licence covers patients residing in Nigeria only.</p>
               </>
             )}
             {legalModalOpen === "ndpr" && (
@@ -2729,7 +2753,7 @@ export default function App() {
                     OUTSIDE SERVICE JURISDICTION
                   </h3>
                   <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                    PrivyDoc services are currently only available to patients physically located in Nigeria as required by MDCN guidelines.
+                    Doctors on this platform are MDCN-licensed. Their practice licence covers patients residing in Nigeria only.
                   </p>
                   <p className="text-xs text-zinc-500 leading-relaxed font-sans">
                     Questions? Contact us at <strong className="text-zinc-300">help@privydoc.com.ng</strong>.
@@ -2758,7 +2782,7 @@ export default function App() {
                   MDCN CLINICAL COMPLIANCE CHECK
                 </h3>
                 <p className="text-xs text-zinc-400 leading-relaxed font-sans pt-1">
-                  PrivyDoc services are licensed by MDCN for patients physically residing in Nigeria.
+                  Doctors on this platform are MDCN-licensed. Their practice licence covers patients residing in Nigeria only.
                 </p>
               </div>
 

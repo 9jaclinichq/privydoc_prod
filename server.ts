@@ -1086,6 +1086,61 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
   }
 });
 
+// Update patient profile (first name, email, state). Phone is the identity key and is never changed here.
+app.patch("/api/patient/profile", async (req, res) => {
+  const { phone, first_name, email, state } = req.body;
+  if (!phone) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
+  }
+
+  try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const sanitizedPhone = normPhone(phone);
+
+    const updates: Record<string, any> = {};
+    if (first_name !== undefined) updates.first_name = first_name;
+    if (email !== undefined) updates.email = email;
+    if (state !== undefined) updates.state = state;
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
+      method: "PATCH",
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(updates)
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update patients table");
+    }
+
+    const patients = await response.json();
+    if (!Array.isArray(patients) || patients.length === 0) {
+      return res.status(404).json({ ok: false, code: "NOT_FOUND", message: "Patient account not found." });
+    }
+
+    const patient = patients[0];
+    res.json({
+      ok: true,
+      patient: {
+        id: patient.id,
+        name: patient.first_name || patient.name,
+        phone: patient.phone,
+        age: patient.age_dob || patient.age,
+        state: patient.state,
+        email: patient.email
+      }
+    });
+  } catch (error) {
+    console.error("Patient profile update error:", error);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Profile update service offline." });
+  }
+});
+
 // 4. Secure Clinician Login Endpoint with Lockout Guard
 app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { mdcn_folio, pin } = req.body;

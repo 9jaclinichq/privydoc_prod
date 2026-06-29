@@ -7,8 +7,7 @@ import {
 import { Consultation } from "../types";
 import { renderRichText } from "../utils";
 import { toast } from "./ToastNotification";
-import { MEN_HEALTH_CONDITIONS } from "../data";
-import { Trash2 } from "lucide-react";
+import { MEN_HEALTH_CONDITIONS, NIGERIAN_STATES } from "../data";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
 
@@ -29,9 +28,13 @@ interface PatientPortalProps {
   formatNaira: (n: number) => string;
   onLogout?: () => void;
   onDeleteAccount?: () => void;
+  onUpdateProfile?: (updates: { first_name: string; email: string; state: string }) => Promise<void> | void;
   patientName?: string;
-  activeSidebarTab: "dashboard" | "cases" | "messages" | "reports" | "newCase";
-  setActiveSidebarTab: (tab: "dashboard" | "cases" | "messages" | "reports" | "newCase") => void;
+  patientPhone?: string;
+  patientEmail?: string;
+  patientState?: string;
+  activeSidebarTab: "dashboard" | "cases" | "messages" | "reports" | "newCase" | "profile";
+  setActiveSidebarTab: (tab: "dashboard" | "cases" | "messages" | "reports" | "newCase" | "profile") => void;
 }
 
 export default function PatientPortal({
@@ -51,10 +54,20 @@ export default function PatientPortal({
   formatNaira,
   onLogout,
   onDeleteAccount,
+  onUpdateProfile,
   patientName = "",
+  patientPhone = "",
+  patientEmail = "",
+  patientState = "",
   activeSidebarTab,
   setActiveSidebarTab
 }: PatientPortalProps) {
+
+  // Profile edit form state
+  const [editFirstName, setEditFirstName] = useState<string>(patientName);
+  const [editEmail, setEditEmail] = useState<string>(patientEmail);
+  const [editState, setEditState] = useState<string>(patientState);
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
   // Dispute states
   const [disputeSubmitted, setDisputeSubmitted] = useState<boolean>(false);
@@ -361,15 +374,85 @@ export default function PatientPortal({
                     </div>
                   </>
                 )}
+              </div>
+            )}
 
-                {/* Delete Account — desktop already has this in the app-level sidebar, so only show it here on mobile/tablet */}
+            {/* VIEW E: PROFILE / ACCOUNT SETTINGS */}
+            {activeSidebarTab === "profile" && (
+              <div className="space-y-6 animate-fade-in max-w-lg">
+                <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-5">
+                  <h4 className="text-sm font-bold text-white border-b border-zinc-900 pb-2.5 flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    <Settings className="w-4 h-4 text-[#d4af37]" /> Edit Profile
+                  </h4>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-mono text-zinc-500 block">Phone Number (not editable)</label>
+                    <input
+                      type="tel"
+                      value={patientPhone}
+                      disabled
+                      className="w-full bg-zinc-900/50 border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-zinc-500 font-mono focus:outline-none cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-mono text-zinc-400 block">First Name</label>
+                    <input
+                      type="text"
+                      value={editFirstName}
+                      onChange={(e) => setEditFirstName(e.target.value)}
+                      className="w-full bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-mono text-zinc-400 block">Email</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-mono text-zinc-400 block">State</label>
+                    <select
+                      value={editState}
+                      onChange={(e) => setEditState(e.target.value)}
+                      className="w-full bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
+                    >
+                      <option value="" disabled>Select your state</option>
+                      {NIGERIAN_STATES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!onUpdateProfile) return;
+                      setSavingProfile(true);
+                      try {
+                        await onUpdateProfile({ first_name: editFirstName, email: editEmail, state: editState });
+                      } finally {
+                        setSavingProfile(false);
+                      }
+                    }}
+                    disabled={savingProfile || !editFirstName.trim() || !editState}
+                    className="w-full py-2.5 bg-[#d4af37] hover:bg-[#b8860b] disabled:opacity-50 text-black font-extrabold rounded-xl text-xs transition-colors"
+                  >
+                    {savingProfile ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+
                 {onDeleteAccount && (
-                  <div className="lg:hidden pt-2 text-center">
+                  <div className="text-center pt-2">
                     <button
                       onClick={onDeleteAccount}
-                      className="inline-flex items-center justify-center gap-1.5 py-2 px-3 text-rose-500/70 hover:text-rose-400 text-[11px] font-bold transition-colors"
+                      className="text-red-500 text-sm underline hover:text-red-400 transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete Account
+                      delete my account
                     </button>
                   </div>
                 )}

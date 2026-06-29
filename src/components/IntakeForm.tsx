@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { 
-  ArrowLeft, ChevronRight, Lock, CreditCard, Building, 
-  Sparkles, Check, CheckCircle2, ShieldAlert 
+import {
+  ArrowLeft, ChevronRight, Lock, CreditCard, Building,
+  Sparkles, Check, CheckCircle2, ShieldAlert
 } from "lucide-react";
 import { INTAKE_QUESTIONS } from "../data";
 import { formatNaira } from "../utils";
@@ -12,9 +12,11 @@ import AdaptiveIntakeForm from "./AdaptiveIntakeForm";
 import PrePaymentSummary from "./PrePaymentSummary";
 import FinalPaymentSummary from "./FinalPaymentSummary";
 import EmergencyPage from "./EmergencyPage";
+import { Patient } from "../types";
 
 interface IntakeFormProps {
   selectedCondition: any;
+  patientSession: Patient | null;
   patientName: string;
   setPatientName: (name: string) => void;
   patientAge: string;
@@ -35,6 +37,7 @@ interface IntakeFormProps {
 
 export default function IntakeForm({
   selectedCondition,
+  patientSession,
   patientName,
   setPatientName,
   patientAge,
@@ -153,6 +156,31 @@ export default function IntakeForm({
 
   // Render Phase 1 or Phase 2 Adaptive Intake Form
   if (checkoutStep === "form" && !showPrePaymentSummary && !showFinalPaymentSummary && !showEmergencyPage) {
+    const profileName = patientSession?.name || patientName;
+    const profileAge = patientSession?.age ?? (parseInt(patientAge) || undefined);
+    const profileState = patientSession?.state;
+
+    if (!profileName || !profileAge || !profileState) {
+      return (
+        <div className="max-w-md mx-auto bg-zinc-950 border border-zinc-900 rounded-3xl p-8 text-center space-y-4 animate-fade-in">
+          <ShieldAlert className="w-10 h-10 text-amber-400 mx-auto" />
+          <h3 className="text-base font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            Complete Your Profile First
+          </h3>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            We need your name, age, and state on file before starting a clinical assessment. Please complete your profile to continue.
+          </p>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-5 py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-colors"
+          >
+            Go Complete Profile
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4 max-w-[480px] mx-auto animate-fade-in" id="adaptive-flow-container">
         <div className="flex justify-between items-center px-2 py-1" id="adaptive-flow-header">
@@ -174,11 +202,15 @@ export default function IntakeForm({
           </span>
         </div>
 
-        <AdaptiveIntakeForm 
+        <div className="px-3 py-2 bg-zinc-950 border border-zinc-900 rounded-xl text-[11px] text-zinc-400 font-mono">
+          Consulting as: <span className="text-white font-bold">{profileName}</span>, Age: <span className="text-white font-bold">{profileAge}</span>, State: <span className="text-white font-bold">{profileState}</span>
+        </div>
+
+        <AdaptiveIntakeForm
           track={selectedCondition.id as any}
-          patientName={patientName}
-          patientAge={parseInt(patientAge) || 30}
-          patientState="Lagos"
+          patientName={profileName}
+          patientAge={profileAge}
+          patientState={profileState}
           patientPhone={patientPhone}
           phase={intakePhase}
           onPhase1Complete={(answers) => {

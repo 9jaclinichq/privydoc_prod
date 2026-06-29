@@ -1916,6 +1916,81 @@ app.post(
   }
 );
 
+// API endpoint for anonymous Quick Check AI analysis (direct Gemini call, no login required)
+app.post(
+  "/api/gemini/quick-check",
+  rateLimiter("geminiQuickCheck", 20, 3 * 60 * 1000, "Too many quick-check requests. Please wait."),
+  async (req, res) => {
+    const { track, answers } = req.body;
+    if (!track || !answers) {
+      return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Track and answers are required." });
+    }
+
+    const fallback = {
+      headline: "Your responses suggest a clinical review would help clarify next steps.",
+      insights: [
+        "Your answers indicate symptoms worth discussing with a licensed doctor.",
+        "Lifestyle and timing factors can meaningfully affect this condition.",
+        "A formal review allows for a tailored treatment plan."
+      ],
+      recommendation: "We recommend a full doctor review to get a personalised assessment and, if appropriate, a prescription.",
+      urgency: "routine" as const
+    };
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      console.warn("GEMINI_API_KEY not configured; returning fallback quick-check insight.");
+      return res.json({ ok: true, ...fallback });
+    }
+
+    try {
+      const prompt = `You are a clinical decision support assistant for PrivyDoc, a men's telemedicine platform in Nigeria. A patient completed an anonymous quick symptom check for the condition "${track}". Their answers (question:answer pairs) are: ${JSON.stringify(answers)}.
+
+Analyse the answers and respond with STRICT JSON only, no markdown, no extra text, matching exactly this shape:
+{"headline": "one sentence summary", "insights": ["insight 1", "insight 2", "insight 3"], "recommendation": "clinical recommendation text", "urgency": "routine" | "soon" | "urgent"}
+
+Do not provide a diagnosis or prescribe medication. Keep tone calm and professional. If any answer suggests a medical emergency, set urgency to "urgent".`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          }),
+          signal: controller.signal
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!geminiRes.ok) {
+        throw new Error(`Gemini API responded with status ${geminiRes.status}: ${await geminiRes.text()}`);
+      }
+
+      const geminiData = await geminiRes.json();
+      const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("Gemini response did not contain valid JSON.");
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.headline || !Array.isArray(parsed.insights) || !parsed.recommendation || !parsed.urgency) {
+        throw new Error("Gemini response JSON missing required fields.");
+      }
+
+      res.json({ ok: true, ...parsed });
+    } catch (error: any) {
+      console.error("Quick-check Gemini call failed, returning fallback:", error);
+      res.json({ ok: true, ...fallback });
+    }
+  }
+);
+
 // API endpoint for AI Assist (Proxy to Supabase Edge Function: ai-assist)
 app.post(
   "/api/ai-assist", 

@@ -379,7 +379,7 @@ export default function PatientPortal({
 
             {/* VIEW E: PROFILE / ACCOUNT SETTINGS */}
             {activeSidebarTab === "profile" && (
-              <div className="space-y-6 animate-fade-in max-w-lg">
+              <div className="space-y-6 animate-fade-in max-w-lg pb-24 lg:pb-0">
                 <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-5">
                   <h4 className="text-sm font-bold text-white border-b border-zinc-900 pb-2.5 flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                     <Settings className="w-4 h-4 text-[#d4af37]" /> Edit Profile

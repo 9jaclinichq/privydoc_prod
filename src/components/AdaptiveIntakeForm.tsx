@@ -82,7 +82,7 @@ export default function AdaptiveIntakeForm({
 
   // Auto-fill logic when currentQuestion is an autoloaded field
   useEffect(() => {
-    if (!currentQuestion) return;
+    if (!currentQuestion?.autoLoad) return;
 
     let autoValue: any = null;
     if (currentQuestion.autoLoad === "name") autoValue = patientName;
@@ -90,20 +90,23 @@ export default function AdaptiveIntakeForm({
     else if (currentQuestion.autoLoad === "state") autoValue = patientState;
     else if (currentQuestion.autoLoad === "phone") autoValue = patientPhone;
 
-    if (autoValue !== null && answers[currentQuestion.id] !== autoValue) {
-      setAnswers((prev) => ({
-        ...prev,
-        [currentQuestion.id]: autoValue
-      }));
+    if (autoValue === null) return;
+    // Already written — nothing to do
+    if (answers[currentQuestion.id] === autoValue) return;
 
-      // Auto-advance after delay (1500ms to allow state update to render on mobile)
-      const timer = setTimeout(() => {
-        handleNext();
-      }, 1500);
+    setAnswers((prev) => ({
+      ...prev,
+      [currentQuestion.id]: autoValue
+    }));
 
-      return () => clearTimeout(timer);
-    }
-  }, [currentQuestion, patientName, patientAge, patientState, patientPhone]);
+    // Advance by index directly — calling handleNext() here would read a stale
+    // `answers` closure (before setAnswers is applied) and fail isCurrentAnswerValid().
+    const timer = setTimeout(() => {
+      setCurrentIndex((idx) => Math.min(idx + 1, activeQuestions.length - 1));
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [currentQuestion?.id, currentQuestion?.autoLoad, patientName, patientAge, patientState, patientPhone, activeQuestions.length]);
 
   // Navigate back
   const handleBack = () => {

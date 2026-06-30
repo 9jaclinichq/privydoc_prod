@@ -68,7 +68,7 @@ export default function AdminOffice({
     // Fetch disputes
     fetch("/api/data/disputes", {
       headers: {
-        "x-admin-auth": "true"
+        "x-admin-auth": localStorage.getItem("privydoc_admin_token") || ""
       }
     })
     .then(res => res.json())
@@ -82,7 +82,7 @@ export default function AdminOffice({
     // Fetch consultations
     fetch("/api/data/consultations", {
       headers: {
-        "x-admin-auth": "true"
+        "x-admin-auth": localStorage.getItem("privydoc_admin_token") || ""
       }
     })
     .then(res => res.json())
@@ -1566,7 +1566,7 @@ export default function AdminOffice({
                               method: "PATCH",
                               headers: {
                                 "Content-Type": "application/json",
-                                "x-admin-auth": "true"
+                                "x-admin-auth": localStorage.getItem("privydoc_admin_token") || ""
                               },
                               body: JSON.stringify({
                                 status: "resolved",
@@ -1584,7 +1584,7 @@ export default function AdminOffice({
                                 method: "POST",
                                 headers: {
                                   "Content-Type": "application/json",
-                                  "x-admin-auth": "true"
+                                  "x-admin-auth": localStorage.getItem("privydoc_admin_token") || ""
                                 },
                                 body: JSON.stringify({
                                   id: "aud_" + Math.random().toString(36).substr(2, 9),

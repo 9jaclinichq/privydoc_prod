@@ -153,7 +153,7 @@ export default function App() {
   // Admin states
   const [adminPin, setAdminPin] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem("privydoc_admin_session") === "true";
+    return !!localStorage.getItem("privydoc_admin_token");
   });
   const [adminView, setAdminView] = useState<"verifications" | "payouts" | "supabase" | "pricing" | "cases" | "broadcast" | "disputes">("verifications");
 
@@ -220,6 +220,7 @@ export default function App() {
     } else {
       localStorage.removeItem("privydoc_admin_session");
       localStorage.removeItem("privydoc_current_admin");
+      localStorage.removeItem("privydoc_admin_token");
     }
   }, [isAdminAuthenticated]);
 
@@ -239,7 +240,7 @@ export default function App() {
       setActiveTab("clinician");
     } else {
       // Priority: admin > doctor > patient
-      const adminSessionSaved = localStorage.getItem("privydoc_admin_session") === "true";
+      const adminSessionSaved = !!localStorage.getItem("privydoc_admin_token");
       const doctorSessionSaved = localStorage.getItem("privydoc_doctor_session");
       const patientSessionSaved = localStorage.getItem("privydoc_patient_session");
 
@@ -639,7 +640,7 @@ export default function App() {
   // they explicitly navigate back past the portal (e.g. via the browser back button).
   useEffect(() => {
     const patientSessionSaved = localStorage.getItem("privydoc_patient_session");
-    const adminSessionSaved = localStorage.getItem("privydoc_admin_session") === "true";
+    const adminSessionSaved = !!localStorage.getItem("privydoc_admin_token");
     const doctorSessionSaved = localStorage.getItem("privydoc_doctor_session");
     const pendingPayment = localStorage.getItem("privydoc_pending_payment");
 
@@ -1530,6 +1531,11 @@ export default function App() {
       });
       const data = await response.json();
       if (response.ok && data.ok) {
+        if (!data.token) {
+          toast.error("Admin login failed: no session token returned. Please contact support.");
+          return;
+        }
+        localStorage.setItem("privydoc_admin_token", data.token);
         setIsAdminAuthenticated(true);
         setAdminView("verifications");
       } else {
@@ -1539,6 +1545,18 @@ export default function App() {
       console.error("Admin login error:", error);
       toast.error("Admin authentication service is currently offline. Please try again later.");
     }
+  };
+
+  // Admin logout
+  const handleAdminLogout = () => {
+    const token = localStorage.getItem("privydoc_admin_token");
+    if (token) {
+      fetch("/api/auth/admin/logout", {
+        method: "POST",
+        headers: { "x-admin-auth": token }
+      }).catch(() => {});
+    }
+    setIsAdminAuthenticated(false);
   };
 
   // Admin verification action
@@ -1758,7 +1776,7 @@ export default function App() {
                 <ShieldCheck className="w-3.5 h-3.5" /> Admin
               </span>
               <button
-                onClick={() => setIsAdminAuthenticated(false)}
+                onClick={handleAdminLogout}
                 className="w-full flex items-center justify-center gap-1.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[11px] font-bold rounded-lg transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" /> Log Out

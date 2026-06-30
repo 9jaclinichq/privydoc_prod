@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Lock, AlertTriangle, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { IntakeQuestion } from "../data/intakeQuestions";
 import {
   getPhase1Questions,
@@ -35,9 +35,21 @@ export default function AdaptiveIntakeForm({
   onCancel,
   phase1Answers = {}
 }: AdaptiveIntakeFormProps) {
-  // Initialize answers with pre-loaded phase 1 answers if available
+  // Initialize answers with pre-loaded phase 1 answers if available.
+  // AutoLoad questions (name/age/state/phone) are never shown as cards, so their
+  // values must be seeded here so branching logic and final submissions still work.
   const [answers, setAnswers] = useState<Record<string, any>>(() => {
-    return { ...phase1Answers };
+    const base = phase === 1 ? getPhase1Questions(track) : getPhase2Questions(track);
+    const autoLoaded: Record<string, any> = {};
+    for (const q of base) {
+      if (!q.autoLoad) continue;
+      if (q.autoLoad === "name") autoLoaded[q.id] = patientName;
+      else if (q.autoLoad === "age") autoLoaded[q.id] = patientAge;
+      else if (q.autoLoad === "state") autoLoaded[q.id] = patientState;
+      else if (q.autoLoad === "phone") autoLoaded[q.id] = patientPhone;
+    }
+    // phase1Answers takes precedence; autoLoaded fills gaps for autoLoad fields
+    return { ...autoLoaded, ...phase1Answers };
   });
 
   // Track the index of the current active question
@@ -66,47 +78,25 @@ export default function AdaptiveIntakeForm({
     }
   }, [track, phase]);
 
-  // Recalculate branched questions dynamically on every answer update
+  // Full branched question list — used for red flag checks and consent validation
   const activeQuestions = useMemo(() => {
     return getBranchedQuestions(baseQuestions, answers);
   }, [baseQuestions, answers]);
 
+  // Questions actually shown as cards — autoLoad fields (name/age/state/phone) are
+  // excluded because their values already appear persistently in the header above.
+  const displayQuestions = useMemo(() => {
+    return activeQuestions.filter((q) => !q.autoLoad);
+  }, [activeQuestions]);
+
   // Ensure index stays in valid bounds if questions are added/removed dynamically
   useEffect(() => {
-    if (currentIndex >= activeQuestions.length) {
-      setCurrentIndex(Math.max(0, activeQuestions.length - 1));
+    if (currentIndex >= displayQuestions.length) {
+      setCurrentIndex(Math.max(0, displayQuestions.length - 1));
     }
-  }, [activeQuestions, currentIndex]);
+  }, [displayQuestions, currentIndex]);
 
-  const currentQuestion: IntakeQuestion | undefined = activeQuestions[currentIndex];
-
-  // Auto-fill logic when currentQuestion is an autoloaded field
-  useEffect(() => {
-    if (!currentQuestion?.autoLoad) return;
-
-    let autoValue: any = null;
-    if (currentQuestion.autoLoad === "name") autoValue = patientName;
-    else if (currentQuestion.autoLoad === "age") autoValue = patientAge;
-    else if (currentQuestion.autoLoad === "state") autoValue = patientState;
-    else if (currentQuestion.autoLoad === "phone") autoValue = patientPhone;
-
-    if (autoValue === null) return;
-    // Already written — nothing to do
-    if (answers[currentQuestion.id] === autoValue) return;
-
-    setAnswers((prev) => ({
-      ...prev,
-      [currentQuestion.id]: autoValue
-    }));
-
-    // Advance by index directly — calling handleNext() here would read a stale
-    // `answers` closure (before setAnswers is applied) and fail isCurrentAnswerValid().
-    const timer = setTimeout(() => {
-      setCurrentIndex((idx) => Math.min(idx + 1, activeQuestions.length - 1));
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [currentQuestion?.id, currentQuestion?.autoLoad, patientName, patientAge, patientState, patientPhone, activeQuestions.length]);
+  const currentQuestion: IntakeQuestion | undefined = displayQuestions[currentIndex];
 
   // Navigate back
   const handleBack = () => {
@@ -202,12 +192,12 @@ export default function AdaptiveIntakeForm({
   const handleNext = () => {
     if (!isCurrentAnswerValid()) return;
 
-    if (currentIndex < activeQuestions.length - 1) {
+    if (currentIndex < displayQuestions.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
       // Last question reached
       if (phase === 1) {
-        // Run final red flag check
+        // Run final red flag check across all questions (including autoLoad)
         const flags = detectRedFlags(answers, activeQuestions);
         if (flags.triggered) {
           onRedFlagTriggered(flags.messages);
@@ -238,26 +228,20 @@ export default function AdaptiveIntakeForm({
     }
   };
 
-  // Compute overall percentage for the progress bar
-  const progressPercent = activeQuestions.length > 0
-    ? Math.round(((currentIndex + 1) / activeQuestions.length) * 100)
+  // Compute overall percentage for the progress bar (based on displayed questions only)
+  const progressPercent = displayQuestions.length > 0
+    ? Math.round(((currentIndex + 1) / displayQuestions.length) * 100)
     : 0;
 
   // Helper to render controls for a single active question
   const renderQuestion = (q: IntakeQuestion) => {
     return (
       <div key={q.id} className="w-full flex flex-col justify-start">
-        {/* Label and Autoload Lock Info */}
+        {/* Category label */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase font-mono tracking-wider bg-neutral-900 text-[#C9A84C] px-2 py-1 rounded">
             {q.category}
           </span>
-          {q.autoLoad && (
-            <div className="flex items-center gap-1 text-xs text-neutral-400 font-mono">
-              <Lock className="w-3 h-3 text-[#C9A84C]" />
-              <span>Auto-filled</span>
-            </div>
-          )}
         </div>
 
         {/* CONSENT QUESTION CARD */}
@@ -296,7 +280,7 @@ export default function AdaptiveIntakeForm({
 
             {/* Answer Controls */}
             <div className="space-y-3" id={`q-controls-${q.id}`}>
-          
+
           {/* SINGLE SELECT */}
           {q.type === "single" && q.options && (
             <div className="grid grid-cols-1 gap-2">
@@ -306,7 +290,6 @@ export default function AdaptiveIntakeForm({
                   <button
                     key={opt}
                     type="button"
-                    disabled={!!q.autoLoad}
                     onClick={() => handleAnswerChange(q.id, opt, q.category)}
                     className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
                       isSelected
@@ -330,7 +313,6 @@ export default function AdaptiveIntakeForm({
                 const isSelected = currentSel.includes(opt);
 
                 const handleMultiToggle = () => {
-                  if (q.autoLoad) return;
                   let updated: string[];
                   if (opt === "None of the above" || opt === "None known") {
                     updated = isSelected ? [] : [opt];
@@ -352,7 +334,6 @@ export default function AdaptiveIntakeForm({
                   <button
                     key={opt}
                     type="button"
-                    disabled={!!q.autoLoad}
                     onClick={handleMultiToggle}
                     className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex justify-between items-center ${
                       isSelected
@@ -386,7 +367,6 @@ export default function AdaptiveIntakeForm({
                   <button
                     key={btn.label}
                     type="button"
-                    disabled={!!q.autoLoad}
                     onClick={() => handleAnswerChange(q.id, btn.val, q.category)}
                     className={`py-3 rounded-xl border text-sm transition-all font-medium text-center ${
                       isSelected
@@ -419,7 +399,6 @@ export default function AdaptiveIntakeForm({
                 type="range"
                 min={q.scaleMin || 1}
                 max={q.scaleMax || 10}
-                disabled={!!q.autoLoad}
                 value={answers[q.id] || q.scaleMin || 1}
                 onChange={(e) =>
                   handleAnswerChange(
@@ -436,32 +415,15 @@ export default function AdaptiveIntakeForm({
           {/* TEXT INPUT */}
           {q.type === "text" && (
             q.category === "demographics" ? (
-              q.autoLoad ? (
-                <input
-                  type="text"
-                  disabled
-                  value={
-                    q.autoLoad === "name" ? patientName :
-                    q.autoLoad === "age" ? String(patientAge) :
-                    q.autoLoad === "state" ? patientState :
-                    q.autoLoad === "phone" ? patientPhone : ""
-                  }
-                  className="w-full px-4 py-3 bg-neutral-900/50 border
-                  border-[#C9A84C]/50 rounded-xl text-[#C9A84C] text-sm
-                  font-medium opacity-100"
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={answers[q.id] || ""}
-                  onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
-                  placeholder="Please type your response here..."
-                  className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
-                />
-              )
+              <input
+                type="text"
+                value={answers[q.id] || ""}
+                onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
+                placeholder="Please type your response here..."
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+              />
             ) : (
               <textarea
-                disabled={!!q.autoLoad}
                 value={answers[q.id] || ""}
                 onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
                 placeholder="Please type your response here..."
@@ -476,7 +438,6 @@ export default function AdaptiveIntakeForm({
             <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-xl p-2 w-full max-w-[200px] mx-auto">
               <button
                 type="button"
-                disabled={!!q.autoLoad}
                 onClick={() => {
                   const curr = parseInt(answers[q.id]) || 0;
                   handleAnswerChange(q.id, Math.max(0, curr - 1), q.category);
@@ -487,14 +448,12 @@ export default function AdaptiveIntakeForm({
               </button>
               <input
                 type="number"
-                disabled={!!q.autoLoad}
                 value={answers[q.id] || ""}
                 onChange={(e) => handleAnswerChange(q.id, parseInt(e.target.value) || 0, q.category)}
                 className="flex-1 bg-transparent text-center text-white text-lg font-mono focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <button
                 type="button"
-                disabled={!!q.autoLoad}
                 onClick={() => {
                   const curr = parseInt(answers[q.id]) || 0;
                   handleAnswerChange(q.id, curr + 1, q.category);
@@ -515,12 +474,21 @@ export default function AdaptiveIntakeForm({
 
   return (
     <div className="w-full flex flex-col gap-4 pb-24 md:pb-0" id="adaptive-intake-form-outer">
-      
+
       {/* Progress & Header (sticky/above the card) */}
       <div className="mb-2 animate-fade-in relative z-10 px-4 md:px-0" id="intake-header-progress">
+        {/* Persistent patient identity strip — replaces autoLoad question cards */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono mb-3">
+          <span className="text-neutral-400">Consulting as:</span>
+          <span className="text-[#C9A84C] font-semibold">{patientName}</span>
+          <span className="text-neutral-600">·</span>
+          <span className="text-[#C9A84C]">Age {patientAge}</span>
+          <span className="text-neutral-600">·</span>
+          <span className="text-[#C9A84C]">{patientState}</span>
+        </div>
         <div className="flex justify-between items-center text-xs font-mono text-neutral-400 mb-2">
           <span className="font-semibold text-neutral-300">
-            {phase === 2 ? "Phase 2 — " : ""}Question {currentIndex + 1} of {activeQuestions.length}
+            {phase === 2 ? "Phase 2 — " : ""}Question {currentIndex + 1} of {displayQuestions.length}
           </span>
           <span className="font-semibold text-[#C9A84C]">{progressPercent}%</span>
         </div>
@@ -534,7 +502,7 @@ export default function AdaptiveIntakeForm({
 
       {/* Main Card (hugs content, flexible height, padded) */}
       <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-6" id="adaptive-intake-form-wrapper">
-        
+
         {/* Main Active Question Card Area */}
         <div className="relative h-auto min-h-0" id="intake-card-viewport">
           <div className="w-full animate-fade-in" key={currentQuestion?.id}>
@@ -567,7 +535,7 @@ export default function AdaptiveIntakeForm({
           disabled={!isCurrentAnswerValid()}
           className="flex items-center gap-1.5 bg-[#C9A84C] text-black hover:bg-[#b0913e] px-5 py-2.5 md:py-2.5 rounded-xl text-sm font-medium font-mono tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span>{currentIndex === activeQuestions.length - 1 ? "Submit" : "Next"}</span>
+          <span>{currentIndex === displayQuestions.length - 1 ? "Submit" : "Next"}</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>

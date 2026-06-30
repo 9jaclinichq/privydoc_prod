@@ -4,7 +4,7 @@ import cors from "cors";
 import path from "path";
 import helmet from "helmet";
 import { fileURLToPath } from "url";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { Resend } from "resend";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -103,7 +103,9 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
   
   const patientPhone = req.headers["x-patient-phone"] as string | undefined;
   const doctorId = req.headers["x-doctor-id"] as string | undefined;
-  const isAdmin = req.headers["x-admin-auth"] === "true";
+  const adminToken = req.headers["x-admin-auth"] as string | undefined;
+  const adminSession = adminToken ? adminSessions.get(adminToken) : undefined;
+  const isAdmin = !!adminSession && adminSession.expiresAt > Date.now();
 
   // Admin has full clearance
   if (isAdmin) {
@@ -244,6 +246,23 @@ function enforceAuthorization(req: express.Request, res: express.Response, next:
   }
 
   res.status(403).json({ ok: false, code: "UNAUTHORIZED", message: "Please establish secure portal access to proceed." });
+}
+
+// Middleware for routes that require a valid admin session token
+function verifyAdminToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const token = req.headers["x-admin-auth"] as string | undefined;
+  if (!token) {
+    return res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "Invalid or expired admin session." });
+  }
+  const session = adminSessions.get(token);
+  if (!session) {
+    return res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "Invalid or expired admin session." });
+  }
+  if (session.expiresAt <= Date.now()) {
+    adminSessions.delete(token);
+    return res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "Invalid or expired admin session." });
+  }
+  return next();
 }
 
 // 1. Healthcheck Endpoint
@@ -569,6 +588,9 @@ app.post("/api/data/fn/:edgeFn", enforceAuthorization, async (req, res, next) =>
 
 // Server-side state for tracking PIN attempts to prevent brute force
 const pinAttempts: Record<string, { count: number; lockedUntil: number }> = {};
+
+// Signed admin sessions: token → expiry. Tokens are 32-byte random hex strings.
+const adminSessions = new Map<string, { expiresAt: number }>();
 
 // Persistent lockout helpers backed by Supabase auth_attempts table.
 // pinAttempts remains the fast-path in-memory cache; these keep them in sync
@@ -1711,10 +1733,19 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
     });
   }
 
-  // Success! Reset attempts
+  // Success! Reset attempts and issue a signed session token
   delete pinAttempts[key];
   clearAuthAttempts(supabaseUrl, supabaseServiceKey, key).catch(() => {});
-  res.json({ ok: true, admin: true });
+  const token = randomBytes(32).toString("hex");
+  adminSessions.set(token, { expiresAt: Date.now() + 2 * 60 * 60 * 1000 }); // 2 hour expiry
+  res.json({ ok: true, admin: true, token });
+});
+
+// 6. Admin Logout — invalidate the session token immediately
+app.post("/api/auth/admin/logout", verifyAdminToken, (req, res) => {
+  const token = req.headers["x-admin-auth"] as string;
+  adminSessions.delete(token);
+  res.json({ ok: true });
 });
 
 // --- PHASE 4: FLUTTERWAVE PAYMENTS & WEBHOOKS ---

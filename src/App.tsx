@@ -1570,7 +1570,6 @@ export default function App() {
         { label: "My Cases", icon: <ListChecks className="w-4 h-4" />, active: patientPortalTab === "cases" && patientSubView === "portal", onClick: () => goPortal("cases") },
         { label: "Messages", icon: <MessageSquare className="w-4 h-4" />, active: patientPortalTab === "messages" && patientSubView === "portal", onClick: () => goPortal("messages") },
         { label: "Reports/Rx", icon: <FileText className="w-4 h-4" />, active: patientPortalTab === "reports" && patientSubView === "portal", onClick: () => goPortal("reports") },
-        { label: "New Consultation", icon: <PlusCircle className="w-4 h-4" />, active: patientPortalTab === "newCase" && patientSubView === "portal", onClick: () => goPortal("newCase") },
         { label: "Profile", icon: <Settings2 className="w-4 h-4" />, active: patientPortalTab === "profile" && patientSubView === "portal", onClick: () => goPortal("profile") }
       ];
     }

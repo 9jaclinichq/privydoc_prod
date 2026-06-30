@@ -444,18 +444,18 @@ export default function PatientPortal({
                   >
                     {savingProfile ? "Saving..." : "Save Changes"}
                   </button>
-                </div>
 
-                {onDeleteAccount && (
-                  <div className="text-center pt-2">
-                    <button
-                      onClick={onDeleteAccount}
-                      className="text-red-500 text-sm underline hover:text-red-400 transition-colors"
-                    >
-                      delete my account
-                    </button>
-                  </div>
-                )}
+                  {onDeleteAccount && (
+                    <div className="text-center pt-3 border-t border-zinc-900 mt-1">
+                      <button
+                        onClick={onDeleteAccount}
+                        className="text-red-500 text-sm underline hover:text-red-400 transition-colors"
+                      >
+                        delete my account
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

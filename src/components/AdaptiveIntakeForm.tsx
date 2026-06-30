@@ -477,15 +477,6 @@ export default function AdaptiveIntakeForm({
 
       {/* Progress & Header (sticky/above the card) */}
       <div className="mb-2 animate-fade-in relative z-10 px-4 md:px-0" id="intake-header-progress">
-        {/* Persistent patient identity strip — replaces autoLoad question cards */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono mb-3">
-          <span className="text-neutral-400">Consulting as:</span>
-          <span className="text-[#C9A84C] font-semibold">{patientName}</span>
-          <span className="text-neutral-600">·</span>
-          <span className="text-[#C9A84C]">Age {patientAge}</span>
-          <span className="text-neutral-600">·</span>
-          <span className="text-[#C9A84C]">{patientState}</span>
-        </div>
         <div className="flex justify-between items-center text-xs font-mono text-neutral-400 mb-2">
           <span className="font-semibold text-neutral-300">
             {phase === 2 ? "Phase 2 — " : ""}Question {currentIndex + 1} of {displayQuestions.length}

@@ -570,6 +570,84 @@ app.post("/api/data/fn/:edgeFn", enforceAuthorization, async (req, res, next) =>
 // Server-side state for tracking PIN attempts to prevent brute force
 const pinAttempts: Record<string, { count: number; lockedUntil: number }> = {};
 
+// Persistent lockout helpers backed by Supabase auth_attempts table.
+// pinAttempts remains the fast-path in-memory cache; these keep them in sync
+// across restarts and multiple server instances.
+
+async function getPersistentLockout(
+  supabaseUrl: string,
+  supabaseKey: string,
+  key: string,
+  now: number
+): Promise<{ locked: boolean; minutesLeft: number }> {
+  try {
+    const r = await fetch(
+      `${supabaseUrl}/rest/v1/auth_attempts?key=eq.${encodeURIComponent(key)}&limit=1`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" } }
+    );
+    if (!r.ok) return { locked: false, minutesLeft: 0 };
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length === 0) return { locked: false, minutesLeft: 0 };
+    const row = rows[0];
+    if (row.locked_until) {
+      const lockedUntilMs = new Date(row.locked_until).getTime();
+      if (now < lockedUntilMs) {
+        pinAttempts[key] = { count: row.count ?? 5, lockedUntil: lockedUntilMs };
+        return { locked: true, minutesLeft: Math.ceil((lockedUntilMs - now) / 60000) };
+      }
+    }
+    if (!pinAttempts[key] && typeof row.count === "number" && row.count > 0) {
+      pinAttempts[key] = { count: row.count, lockedUntil: 0 };
+    }
+    return { locked: false, minutesLeft: 0 };
+  } catch {
+    return { locked: false, minutesLeft: 0 };
+  }
+}
+
+async function persistAuthFailure(
+  supabaseUrl: string,
+  supabaseKey: string,
+  key: string,
+  count: number,
+  lockedUntilMs: number
+): Promise<void> {
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/auth_attempts`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates"
+      },
+      body: JSON.stringify({
+        key,
+        count,
+        locked_until: lockedUntilMs > 0 ? new Date(lockedUntilMs).toISOString() : null,
+        last_attempt: new Date().toISOString()
+      })
+    });
+  } catch (e) {
+    console.error("[auth_attempts] Failed to persist failure for key:", key, e);
+  }
+}
+
+async function clearAuthAttempts(
+  supabaseUrl: string,
+  supabaseKey: string,
+  key: string
+): Promise<void> {
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/auth_attempts?key=eq.${encodeURIComponent(key)}`, {
+      method: "DELETE",
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+    });
+  } catch (e) {
+    console.error("[auth_attempts] Failed to clear lockout for key:", key, e);
+  }
+}
+
 function sha256(data: string): string {
   return createHash("sha256").update(data).digest("hex");
 }
@@ -1023,6 +1101,11 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
+    const persistedLockout = await getPersistentLockout(supabaseUrl, supabaseServiceKey, key, now);
+    if (persistedLockout.locked) {
+      return res.status(423).json({ ok: false, code: "LOCKED_OUT", message: `Too many failed PIN attempts. Your vault has been locked. Please try again in ${persistedLockout.minutesLeft} minutes.` });
+    }
+
     const response = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
       method: "GET",
       headers: {
@@ -1049,16 +1132,18 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
         pinAttempts[key] = { count: 0, lockedUntil: 0 };
       }
       pinAttempts[key].count += 1;
-      
+
       if (pinAttempts[key].count >= 5) {
         pinAttempts[key].lockedUntil = now + 15 * 60 * 1000; // 15 minutes lockout
+        persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, pinAttempts[key].lockedUntil).catch(() => {});
         return res.status(423).json({
           ok: false,
           code: "LOCKED_OUT",
           message: "Too many failed PIN attempts. Your vault has been locked. Please try again in 15 minutes."
         });
       }
-      
+
+      persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, 0).catch(() => {});
       return res.status(401).json({
         ok: false,
         code: "AUTH_FAILED",
@@ -1068,6 +1153,7 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
 
     // Success! Reset attempts
     delete pinAttempts[key];
+    clearAuthAttempts(supabaseUrl, supabaseServiceKey, key).catch(() => {});
 
     res.json({
       ok: true,
@@ -1168,6 +1254,11 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
+    const persistedLockout = await getPersistentLockout(supabaseUrl, supabaseServiceKey, key, now);
+    if (persistedLockout.locked) {
+      return res.status(423).json({ ok: false, code: "LOCKED_OUT", message: `Too many failed PIN attempts. Your clinician account has been locked. Please try again in ${persistedLockout.minutesLeft} minutes.` });
+    }
+
     await ensureDemoDoctorsSeeded(supabaseUrl, supabaseServiceKey);
 
     const response = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent(mdcn_folio.trim())}`, {
@@ -1196,16 +1287,18 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
         pinAttempts[key] = { count: 0, lockedUntil: 0 };
       }
       pinAttempts[key].count += 1;
-      
+
       if (pinAttempts[key].count >= 5) {
         pinAttempts[key].lockedUntil = now + 15 * 60 * 1000; // 15 minutes lockout
+        persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, pinAttempts[key].lockedUntil).catch(() => {});
         return res.status(423).json({
           ok: false,
           code: "LOCKED_OUT",
           message: "Too many failed PIN attempts. Your clinician account has been locked. Please try again in 15 minutes."
         });
       }
-      
+
+      persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, 0).catch(() => {});
       return res.status(401).json({
         ok: false,
         code: "AUTH_FAILED",
@@ -1223,6 +1316,7 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
 
     // Success! Reset attempts
     delete pinAttempts[key];
+    clearAuthAttempts(supabaseUrl, supabaseServiceKey, key).catch(() => {});
 
     res.json({
       ok: true,
@@ -1566,7 +1660,10 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
   const key = `admin:default`;
   const now = Date.now();
 
-  // Check lockout
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+
+  // Check lockout (in-memory fast path, then persistent)
   if (pinAttempts[key] && pinAttempts[key].count >= 5 && now < pinAttempts[key].lockedUntil) {
     const minutesLeft = Math.ceil((pinAttempts[key].lockedUntil - now) / (60 * 1000));
     return res.status(423).json({
@@ -1574,6 +1671,10 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
       code: "LOCKED_OUT",
       message: `Too many failed PIN attempts. Administrative panel locked. Please try again in ${minutesLeft} minutes.`
     });
+  }
+  const persistedLockout = await getPersistentLockout(supabaseUrl, supabaseServiceKey, key, now).catch(() => ({ locked: false, minutesLeft: 0 }));
+  if (persistedLockout.locked) {
+    return res.status(423).json({ ok: false, code: "LOCKED_OUT", message: `Too many failed PIN attempts. Administrative panel locked. Please try again in ${persistedLockout.minutesLeft} minutes.` });
   }
 
   // Admin secure default bypass PIN
@@ -1591,16 +1692,18 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
       pinAttempts[key] = { count: 0, lockedUntil: 0 };
     }
     pinAttempts[key].count += 1;
-    
+
     if (pinAttempts[key].count >= 5) {
       pinAttempts[key].lockedUntil = now + 15 * 60 * 1000; // 15 minutes lockout
+      persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, pinAttempts[key].lockedUntil).catch(() => {});
       return res.status(423).json({
         ok: false,
         code: "LOCKED_OUT",
         message: "Too many failed PIN attempts. Administrative panel locked for 15 minutes."
       });
     }
-    
+
+    persistAuthFailure(supabaseUrl, supabaseServiceKey, key, pinAttempts[key].count, 0).catch(() => {});
     return res.status(401).json({
       ok: false,
       code: "AUTH_FAILED",
@@ -1610,6 +1713,7 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
 
   // Success! Reset attempts
   delete pinAttempts[key];
+  clearAuthAttempts(supabaseUrl, supabaseServiceKey, key).catch(() => {});
   res.json({ ok: true, admin: true });
 });
 

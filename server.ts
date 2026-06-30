@@ -18,6 +18,18 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE)
   process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE;
 }
 
+// Single source of truth for Supabase credentials used in all server-side calls.
+// The anon key is intentionally NOT allowed as a fallback here — server routes must
+// use the service role key so that Row Level Security policies are bypassed correctly.
+function getSupabaseConfig(): { supabaseUrl: string; supabaseServiceKey: string } {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!supabaseServiceKey) {
+    console.error("CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set — server-side Supabase calls will fail. Never use the anon key for server operations.");
+  }
+  return { supabaseUrl, supabaseServiceKey };
+}
+
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -300,8 +312,7 @@ app.get("/api/config", async (req, res, next) => {
   }
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     const response = await fetch(`${supabaseUrl}/rest/v1/app_config`, {
       method: "GET",
@@ -421,8 +432,7 @@ app.get("/api/data/:table", enforceAuthorization, async (req, res, next) => {
   try {
     const { table } = req.params;
     const query = req.url.split("?")[1] || "";
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     if (table === "doctors") {
       await ensureDemoDoctorsSeeded(supabaseUrl, supabaseServiceKey);
@@ -462,8 +472,7 @@ app.post("/api/data/:table", enforceAuthorization, (req, res, next) => {
 }, async (req, res, next) => {
   try {
     const { table } = req.params;
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     if (table === "patients") {
       const { phone } = req.body;
@@ -519,8 +528,7 @@ app.patch("/api/data/:table", enforceAuthorization, async (req, res, next) => {
   try {
     const { table } = req.params;
     const query = req.url.split("?")[1] || "";
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     const url = `${supabaseUrl}/rest/v1/${table}${query ? "?" + query : ""}`;
     const response = await fetch(url, {
@@ -557,8 +565,7 @@ app.patch("/api/data/:table", enforceAuthorization, async (req, res, next) => {
 app.post("/api/data/fn/:edgeFn", enforceAuthorization, async (req, res, next) => {
   try {
     const { edgeFn } = req.params;
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     const url = `${supabaseUrl}/functions/v1/${edgeFn}`;
     const response = await fetch(url, {
@@ -746,8 +753,7 @@ app.post("/api/otp/send", rateLimiter("otpSend", 10, 5 * 60 * 1000, "Too many OT
   const todayDate = new Date().toISOString().split("T")[0];
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     // A. Daily limit throttling check (max 100 OTPs per day across system to prevent API cost attacks)
     let dailyCount = 0;
@@ -1024,8 +1030,7 @@ app.post("/api/otp/verify", rateLimiter("otpVerify", 10, 1 * 60 * 1000, "Too man
   const hashedInput = sha256(code);
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     let otpRecord: { code_hash: string; expires_at: string | number; id?: string } | null = null;
     let verifiedViaDb = false;
@@ -1120,8 +1125,7 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
   }
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     const persistedLockout = await getPersistentLockout(supabaseUrl, supabaseServiceKey, key, now);
     if (persistedLockout.locked) {
@@ -1202,8 +1206,7 @@ app.patch("/api/patient/profile", async (req, res) => {
   }
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
     const sanitizedPhone = normPhone(phone);
 
     const updates: Record<string, any> = {};
@@ -1273,8 +1276,7 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
   }
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     const persistedLockout = await getPersistentLockout(supabaseUrl, supabaseServiceKey, key, now);
     if (persistedLockout.locked) {
@@ -1373,8 +1375,7 @@ app.get("/api/auth/patient/verify-forgot", async (req, res) => {
   const sanitizedPhone = normPhone(phone as string);
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     if (!supabaseUrl || !supabaseServiceKey) {
       // Offline fallback success for dev
@@ -1416,8 +1417,7 @@ app.post("/api/auth/patient/reset-pin", async (req, res) => {
   const sanitizedPhone = normPhone(phone);
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     // 1. Verify OTP first (using internal API/memory lookup)
     let otpValid = false;
@@ -1506,8 +1506,7 @@ app.delete("/api/auth/patient/account", async (req, res) => {
   const sanitizedPhone = normPhone(String(phone));
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     if (supabaseUrl && supabaseServiceKey) {
       const headers = {
@@ -1549,8 +1548,7 @@ app.get("/api/auth/clinician/verify-forgot", async (req, res) => {
   const sanitizedPhone = normPhone(phone as string);
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return res.json({ ok: true, message: "Bypass verification in local/dev environment." });
@@ -1594,8 +1592,7 @@ app.post("/api/auth/clinician/reset-pin", async (req, res) => {
   const sanitizedPhone = normPhone(phone);
 
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     // 1. Verify OTP first
     let otpValid = false;
@@ -1682,8 +1679,7 @@ app.post("/api/auth/admin/login", rateLimiter("adminLogin", 5, 1 * 60 * 1000, "T
   const key = `admin:default`;
   const now = Date.now();
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+  const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
   // Check lockout (in-memory fast path, then persistent)
   if (pinAttempts[key] && pinAttempts[key].count >= 5 && now < pinAttempts[key].lockedUntil) {
@@ -1826,8 +1822,7 @@ app.post("/api/payment/verify", async (req, res, next) => {
         });
       }
 
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+      const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
       // A. Check idempotency: make sure this tx_ref has not already been processed
       const checkLogRes = await fetch(`${supabaseUrl}/rest/v1/payments_log?tx_ref=eq.${tx_ref}`, {
@@ -2011,8 +2006,7 @@ app.post(["/api/payment/webhook", "/api/webhooks/flutterwave"], async (req, res,
     const { id: flwTxId, txRef, amount, currency, status, customer } = payload;
 
     if (status === "successful" && currency === "NGN") {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+      const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
       // Check if tx_ref already processed in payments_log
       const checkLogRes = await fetch(`${supabaseUrl}/rest/v1/payments_log?tx_ref=eq.${txRef}`, {
@@ -2306,8 +2300,7 @@ app.post(
   "/api/ai-assist", 
   rateLimiter("aiAssist", 20, 3 * 60 * 1000, "Too many AI assist requests. Please wait."), 
   async (req, res) => {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     try {
       const doctorId = req.headers["x-doctor-id"] || "default_doctor";
@@ -2428,8 +2421,7 @@ privydoc.com.ng
 
 const handleDoctorReminders = async (req: express.Request, res: express.Response) => {
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     // A. Fetch active/pending consultations that are assigned to a doctor
     const activeStages = ["initial", "day2_pending", "day5_pending", "review_open"];
@@ -2565,8 +2557,7 @@ const handleDoctorReminders = async (req: express.Request, res: express.Response
 
 const handleAplCheck = async (req: express.Request, res: express.Response) => {
   try {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://shgrwndvdpouzcrimbhm.supabase.co";
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
     // Fetch all active/pending (not already suspended) doctors
     const docUrl = `${supabaseUrl}/rest/v1/doctors?status=neq.suspended`;

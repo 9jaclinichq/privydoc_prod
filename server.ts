@@ -1186,7 +1186,7 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
     }
 
     const doctor = doctors[0];
-    const pinMatches = (doctor.pin_hash === pin) || (doctor.pin_hash === sha256(pin));
+    const pinMatches = doctor.pin_hash === sha256(pin);
     if (!pinMatches) {
       // Record failed attempts
       if (!pinAttempts[key] || now > pinAttempts[key].lockedUntil) {
@@ -1534,7 +1534,7 @@ app.post("/api/auth/clinician/reset-pin", async (req, res) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          pin_hash: pin
+          pin_hash: sha256(pin)
         })
       });
 

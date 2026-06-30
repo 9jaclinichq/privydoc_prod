@@ -1147,6 +1147,9 @@ app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 
   if (!mdcn_folio || !pin) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "MDCN Folio and PIN are required." });
   }
+  if (!/^\d{6}$/.test(String(pin))) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Doctor PIN must be exactly 6 digits." });
+  }
 
   const key = `doctor:${mdcn_folio.toLowerCase().trim()}`;
   const now = Date.now();
@@ -1437,7 +1440,7 @@ app.get("/api/auth/clinician/verify-forgot", async (req, res) => {
       return res.json({ ok: true, message: "Bypass verification in local/dev environment." });
     }
 
-    const response = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent((mdcn_folio as string).trim())}&phone=eq.${sanitizedPhone}&limit=1`, {
+    const response = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent((mdcn_folio as string).trim())}&phone=eq.${encodeURIComponent(sanitizedPhone)}&limit=1`, {
       method: "GET",
       headers: {
         apikey: supabaseServiceKey,
@@ -1467,6 +1470,9 @@ app.post("/api/auth/clinician/reset-pin", async (req, res) => {
   const { mdcn_folio, phone, otp, pin } = req.body;
   if (!mdcn_folio || !phone || !otp || !pin) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Folio, phone, OTP, and new PIN are required." });
+  }
+  if (!/^\d{6}$/.test(String(pin))) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "New doctor PIN must be exactly 6 digits." });
   }
 
   const sanitizedPhone = normPhone(phone);
@@ -1526,7 +1532,7 @@ app.post("/api/auth/clinician/reset-pin", async (req, res) => {
 
     // 2. Update doctor PIN
     if (supabaseUrl && supabaseServiceKey) {
-      const updateResponse = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent(mdcn_folio.trim())}&phone=eq.${sanitizedPhone}`, {
+      const updateResponse = await fetch(`${supabaseUrl}/rest/v1/doctors?mdcn_folio=eq.${encodeURIComponent(mdcn_folio.trim())}&phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
         method: "PATCH",
         headers: {
           apikey: supabaseServiceKey,

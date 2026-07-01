@@ -136,6 +136,7 @@ export default function AdminOffice({
   };
 
   const handleSaveRate = (id: string) => {
+    console.log("PRICING SAVE FIRED", id, editingPrice);
     const updatedRates = allRates.map(r => r.id === id ? { ...r, price: editingPrice, name: editingName, description: editingDesc } : r);
     pricingApi.updateAll(updatedRates);
     setEditingRateId(null);

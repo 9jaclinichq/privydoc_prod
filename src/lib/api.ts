@@ -300,16 +300,15 @@ export async function syncWithSupabase() {
       const dbPricing = await supabaseFetch("pricing");
       if (Array.isArray(dbPricing) && dbPricing.length > 0) {
         const normalizedPricing = dbPricing.map((row: any) => {
-          const fallback = DEFAULT_PRICING.find(p => p.id === row.id);
-          // Config-style rows (app_config table convention) store the amount in a
-          // text "value" column rather than "price" - parse it the same way server.ts does.
-          const rawValue = row.price ?? row.value ?? row.amount;
-          const parsedValue = typeof rawValue === "string" ? parseInt(rawValue, 10) : rawValue;
+          // Confirmed via Supabase PGRST204: the "pricing" table only has "key" and
+          // "value" columns - no id, name, or description. "key" is the real identifier.
+          const fallback = DEFAULT_PRICING.find(p => p.id === row.key);
+          const parsedValue = typeof row.value === "string" ? parseInt(row.value, 10) : row.value;
           return {
-            id: row.id,
-            name: row.name ?? row.key ?? fallback?.name ?? "",
+            id: row.key,
+            name: row.key,
             price: typeof parsedValue === "number" && !isNaN(parsedValue) ? parsedValue : (fallback?.price ?? 0),
-            description: row.description ?? fallback?.description ?? ""
+            description: fallback?.description ?? ""
           };
         });
         localStorage.setItem(KEYS.PRICING, JSON.stringify(normalizedPricing));
@@ -1508,12 +1507,12 @@ export const pricingApi = {
   updateAll: (pricing: PricingConfig[]): { success: boolean } => {
     localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
 
-    // Attempt live replication to Supabase - table uses the app_config key/value/description
-    // convention, not price/name, so write "value" (text) rather than "price".
+    // Attempt live replication to Supabase - the "pricing" table only has key/value
+    // columns (confirmed via PGRST204), so only "value" is sent, filtered by "key".
     pricing.forEach(p => {
-      const payload = { value: String(p.price), description: p.description };
-      console.log("[pricingApi.updateAll] sending", { id: p.id, payload });
-      supabaseUpdate("pricing", `id=eq.${p.id}`, payload)
+      const payload = { value: String(p.price) };
+      console.log("[pricingApi.updateAll] sending", { key: p.id, payload });
+      supabaseUpdate("pricing", `key=eq.${p.id}`, payload)
         .then(res => console.log("[pricingApi.updateAll] Supabase update succeeded for", p.id, res))
         .catch(e => console.error("[pricingApi.updateAll] Supabase update FAILED for", p.id, e));
     });
@@ -1529,8 +1528,8 @@ export const pricingApi = {
       localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
 
       const payload = { value: String(price) };
-      console.log("[pricingApi.updatePrice] sending", { id, payload });
-      supabaseUpdate("pricing", `id=eq.${id}`, payload)
+      console.log("[pricingApi.updatePrice] sending", { key: id, payload });
+      supabaseUpdate("pricing", `key=eq.${id}`, payload)
         .then(res => console.log("[pricingApi.updatePrice] Supabase update succeeded for", id, res))
         .catch(e => console.error("[pricingApi.updatePrice] Supabase update FAILED for", id, e));
 

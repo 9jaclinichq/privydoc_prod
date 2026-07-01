@@ -718,7 +718,22 @@ export default function App() {
         answer: intakeAnswers[q.id] || (q.id === "age" ? patientAge : q.id === "duration" ? intakeAnswers["duration"] || selectedCondition.durationOptions[0] : "Not specified")
       }));
 
-    const amount = pricingApi.getById("base_consultation")?.price ?? 7500;
+    // Read the checkout amount dynamically from the server-authoritative /api/config
+    // endpoint (backed by the same "pricing" table the admin panel writes to), so the
+    // amount charged always matches what /api/payment/verify validates against.
+    let amount = pricingApi.getById("price_full")?.price ?? 7500;
+    try {
+      const configRes = await fetch("/api/config");
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        if (typeof configData.price_full === "number") {
+          amount = configData.price_full;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch dynamic pricing config, using cached/fallback amount:", e);
+    }
+
     const tx_ref = `pd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     if (bypass) {

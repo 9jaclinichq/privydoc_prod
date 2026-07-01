@@ -130,7 +130,7 @@ export default function AdminOffice({
 
   const handleStartEdit = (rate: any) => {
     setEditingRateId(rate.id);
-    setEditingPrice(rate.price);
+    setEditingPrice(parseInt(String(rate.price), 10) || 0);
     setEditingName(rate.name);
     setEditingDesc(rate.description);
   };
@@ -1161,7 +1161,7 @@ export default function AdminOffice({
                         <div className="flex sm:flex-col items-start sm:items-end gap-3 sm:gap-2 shrink-0">
                           <div className="text-left sm:text-right">
                             <span className="text-[9px] font-mono text-zinc-500 uppercase block tracking-wider">PLATFORM RATE</span>
-                            <strong className="text-sm font-extrabold text-[#E5C158] font-mono">{formatNaira(rate.price)}</strong>
+                            <strong className="text-sm font-extrabold text-[#E5C158] font-mono">{(() => { const val = parseInt(String(rate.price), 10); return isNaN(val) ? String(rate.price) : formatNaira(val); })()}</strong>
                           </div>
                           <button
                             type="button"

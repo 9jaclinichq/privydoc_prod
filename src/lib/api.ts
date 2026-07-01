@@ -208,6 +208,7 @@ const mapPayoutFromSupabase = (s: any): PayoutRequest => ({
 
 // Background Synchronizer with secure role-based scoping
 export async function syncWithSupabase() {
+  console.log("[syncWithSupabase] fired at", new Date().toISOString());
   try {
     const patientSession = localStorage.getItem("privydoc_patient_session");
     const doctorSession = localStorage.getItem("privydoc_doctor_session") || localStorage.getItem("privydoc_current_doctor");

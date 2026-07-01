@@ -293,7 +293,7 @@ app.get("/api/config/payment", (req, res) => {
 });
 
 // 2. Server-Cached Config Endpoint (/api/config)
-let configCache: { price_full: number; price_review: number; payout_pct: number; timestamp: number } | null = null;
+let configCache: { price_full: number; price_review: number; payout_pct: number; flwPublicKey: string; timestamp: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
 
 app.get("/api/config", async (req, res, next) => {
@@ -307,7 +307,8 @@ app.get("/api/config", async (req, res, next) => {
     return {
       price_full: 7500,
       price_review: 3500,
-      payout_pct: 70
+      payout_pct: 70,
+      flwPublicKey: process.env.FLW_PUBLIC_KEY ?? ""
     };
   }
 

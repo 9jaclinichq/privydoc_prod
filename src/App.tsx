@@ -718,16 +718,21 @@ export default function App() {
         answer: intakeAnswers[q.id] || (q.id === "age" ? patientAge : q.id === "duration" ? intakeAnswers["duration"] || selectedCondition.durationOptions[0] : "Not specified")
       }));
 
-    // Read the checkout amount dynamically from the server-authoritative /api/config
-    // endpoint (backed by the same "pricing" table the admin panel writes to), so the
-    // amount charged always matches what /api/payment/verify validates against.
+    // Read the checkout amount and Flutterwave public key dynamically from the
+    // server-authoritative /api/config endpoint (backed by the same "pricing" table
+    // the admin panel writes to), so the amount charged always matches what
+    // /api/payment/verify validates against, and the public key stays in sync with env.
     let amount = pricingApi.getById("price_full")?.price ?? 7500;
+    let flwPublicKey = "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
     try {
       const configRes = await fetch("/api/config");
       if (configRes.ok) {
         const configData = await configRes.json();
         if (typeof configData.price_full === "number") {
           amount = configData.price_full;
+        }
+        if (configData.flwPublicKey) {
+          flwPublicKey = configData.flwPublicKey;
         }
       }
     } catch (e) {
@@ -799,20 +804,6 @@ export default function App() {
       tx_ref,
       amount
     }));
-
-    // Fetch dynamically configured Flutterwave public key from server-side config API at runtime
-    let flwPublicKey = "FLWPUBK_TEST-9bbfffa3e76a6cfb9fa490b7936a7985-X";
-    try {
-      const configRes = await fetch("/api/config/payment");
-      if (configRes.ok) {
-        const configData = await configRes.json();
-        if (configData.ok && configData.flw_public_key) {
-          flwPublicKey = configData.flw_public_key;
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch dynamically configured Flutterwave public key:", e);
-    }
 
     const customerEmail = patientEmail || "patient@privydoc.com.ng";
 

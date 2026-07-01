@@ -300,10 +300,14 @@ export async function syncWithSupabase() {
       if (Array.isArray(dbPricing) && dbPricing.length > 0) {
         const normalizedPricing = dbPricing.map((row: any) => {
           const fallback = DEFAULT_PRICING.find(p => p.id === row.id);
+          // Config-style rows (app_config table convention) store the amount in a
+          // text "value" column rather than "price" - parse it the same way server.ts does.
+          const rawValue = row.price ?? row.value ?? row.amount;
+          const parsedValue = typeof rawValue === "string" ? parseInt(rawValue, 10) : rawValue;
           return {
             id: row.id,
-            name: row.name ?? fallback?.name ?? "",
-            price: row.price ?? fallback?.price ?? 0,
+            name: row.name ?? row.key ?? fallback?.name ?? "",
+            price: typeof parsedValue === "number" && !isNaN(parsedValue) ? parsedValue : (fallback?.price ?? 0),
             description: row.description ?? fallback?.description ?? ""
           };
         });

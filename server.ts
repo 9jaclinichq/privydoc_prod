@@ -314,7 +314,9 @@ app.get("/api/config", async (req, res, next) => {
   try {
     const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
-    const response = await fetch(`${supabaseUrl}/rest/v1/app_config`, {
+    // Read checkout pricing from the "pricing" table - this is the table the admin
+    // pricing panel actually writes to, so checkout stays in sync with admin edits.
+    const response = await fetch(`${supabaseUrl}/rest/v1/pricing`, {
       method: "GET",
       headers: {
         apikey: supabaseServiceKey,

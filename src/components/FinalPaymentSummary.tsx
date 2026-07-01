@@ -13,7 +13,7 @@ export default function FinalPaymentSummary({
   onProceedToPayment
 }: FinalPaymentSummaryProps) {
   return (
-    <div className="w-full max-w-[480px] mx-auto bg-neutral-950/40 backdrop-blur-md rounded-2xl border border-neutral-800/60 p-6 flex flex-col space-y-6" id="final-payment-summary-container">
+    <div className="w-full max-w-[480px] mx-auto bg-neutral-950/40 md:backdrop-blur-md rounded-2xl border border-neutral-800/60 p-6 flex flex-col space-y-6" id="final-payment-summary-container">
 
       <div className="bg-neutral-900/60 border border-neutral-800/50 rounded-xl p-5 text-center space-y-3" id="final-summary-header-card">
         <div className="w-12 h-12 bg-[#C9A84C]/15 border border-[#C9A84C]/30 text-[#C9A84C] rounded-full flex items-center justify-center mx-auto">

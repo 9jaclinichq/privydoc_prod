@@ -23,7 +23,7 @@ export default function PrePaymentSummary({
   const displayedFactors = factors.slice(0, 5);
 
   return (
-    <div className="w-full max-w-[480px] mx-auto bg-neutral-950/40 backdrop-blur-md rounded-2xl border border-neutral-800/60 p-6 flex flex-col space-y-6" id="pre-payment-summary-container">
+    <div className="w-full max-w-[480px] mx-auto bg-neutral-950/40 md:backdrop-blur-md rounded-2xl border border-neutral-800/60 p-6 flex flex-col space-y-6" id="pre-payment-summary-container">
       
       {/* Top section: Assessment Header Card */}
       <div className="bg-neutral-900/60 border border-neutral-800/50 rounded-xl p-5 text-center space-y-3" id="summary-header-card">

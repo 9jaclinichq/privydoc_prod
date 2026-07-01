@@ -420,7 +420,7 @@ export default function AdaptiveIntakeForm({
                 value={answers[q.id] || ""}
                 onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
                 placeholder="Please type your response here..."
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all touch-manipulation"
               />
             ) : (
               <textarea
@@ -428,7 +428,7 @@ export default function AdaptiveIntakeForm({
                 onChange={(e) => handleAnswerChange(q.id, e.target.value, q.category)}
                 placeholder="Please type your response here..."
                 rows={4}
-                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all"
+                className="w-full px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C] transition-all touch-manipulation"
               />
             )
           )}
@@ -492,7 +492,7 @@ export default function AdaptiveIntakeForm({
       </div>
 
       {/* Main Card (hugs content, flexible height, padded) */}
-      <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-6" id="adaptive-intake-form-wrapper">
+      <div className="w-full md:max-w-[480px] mx-auto bg-black md:bg-neutral-950/40 md:backdrop-blur-md rounded-none md:rounded-2xl border-0 md:border md:border-neutral-800/60 p-4 md:p-6 flex flex-col gap-6 h-auto min-h-0 pb-6" id="adaptive-intake-form-wrapper">
 
         {/* Main Active Question Card Area */}
         <div className="relative h-auto min-h-0" id="intake-card-viewport">

@@ -1897,12 +1897,25 @@ app.post("/api/payment/verify", async (req, res, next) => {
       let redFlag = false;
       let redFlagSource = null;
 
-      // Local pre-check from raw answers
-      const rawAnsStr = JSON.stringify(raw_answers || []).toLowerCase();
-      const hasChestPain = rawAnsStr.includes("chest pain") || rawAnsStr.includes("chest_pain");
-      const hasHeartDisease = rawAnsStr.includes("heart disease") || rawAnsStr.includes("heart_disease") || rawAnsStr.includes("angina") || rawAnsStr.includes("stroke");
+      // Local pre-check: only flag genuinely active cardiovascular red-flag answers,
+      // matching the same dedicated Phase 1 safety questions (and Yes/true trigger
+      // values) already screened client-side before payment. A blind substring
+      // search over all raw answers previously also matched the general past-medical-
+      // history question (which lists "Heart disease"/"Stroke" as plain checkbox
+      // options with no active-symptom meaning), producing false-positive red flags
+      // for patients with only a historical condition after they had already paid.
+      const CARDIOVASCULAR_SAFETY_QUESTIONS = [
+        "Do you ever get chest pain, chest tightness or pressure — during sex, exercise or at rest?",
+        "Do you get unusually short of breath during mild activity or at rest?",
+        "Are you taking any nitrate medications? (e.g. GTN spray, Isosorbide, or chest pain medicines taken under the tongue)",
+        "Have you had a heart attack or stroke in the last 6 months?"
+      ];
+      const hasActiveCardiovascularFlag = Array.isArray(raw_answers) && raw_answers.some((a: any) => {
+        const answerStr = String(a?.answer).toLowerCase();
+        return CARDIOVASCULAR_SAFETY_QUESTIONS.includes(a?.question) && (answerStr === "yes" || answerStr === "true");
+      });
 
-      if (hasChestPain || hasHeartDisease) {
+      if (hasActiveCardiovascularFlag) {
         redFlag = true;
         redFlagSource = "intake";
       }

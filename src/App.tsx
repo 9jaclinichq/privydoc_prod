@@ -803,6 +803,7 @@ export default function App() {
 
     // Open Flutterwave Checkout
     if (typeof (window as any).FlutterwaveCheckout === "function") {
+      let paymentSuccessful = false;
       (window as any).FlutterwaveCheckout({
         public_key: flwPublicKey,
         tx_ref,
@@ -820,8 +821,13 @@ export default function App() {
           logo: "https://app.privydoc.com.ng/pwa_logo.svg"
         },
         callback: async (response: any) => {
+          if (response.status !== "successful") {
+            setIsSubmittingIntake(false);
+            toast.error("Payment was not completed. Please try again.");
+            return;
+          }
           const transaction_id = response.transaction_id || response.id;
-          
+
           try {
             // Verify payment server-side
             const res = await fetch("/api/payment/verify", {
@@ -858,6 +864,7 @@ export default function App() {
               localStorage.removeItem("privydoc_pending_payment");
               localStorage.removeItem("privydoc_pending_intake");
 
+              paymentSuccessful = true;
               setCheckoutStep("success");
               setSelectedCase(data.consultation);
               triggerRefresh();
@@ -872,8 +879,10 @@ export default function App() {
           }
         },
         onclose: () => {
-          setIsSubmittingIntake(false);
-          onPaymentCancelled?.();
+          if (!paymentSuccessful) {
+            setIsSubmittingIntake(false);
+            onPaymentCancelled?.();
+          }
         }
       });
     } else {

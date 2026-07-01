@@ -138,6 +138,9 @@ export default function AdminOffice({
   const handleSaveRate = (id: string) => {
     console.log("PRICING SAVE FIRED", id, editingPrice);
     const updatedRates = allRates.map(r => r.id === id ? { ...r, price: editingPrice, name: editingName, description: editingDesc } : r);
+    console.log("[handleSaveRate] payload being sent to pricingApi.updateAll", updatedRates);
+    // pricingApi.updateAll fires the Supabase write asynchronously (fire-and-forget);
+    // its actual response/error is logged deeper in the chain (src/lib/api.ts, src/services/data.ts).
     pricingApi.updateAll(updatedRates);
     setEditingRateId(null);
     triggerRefresh();

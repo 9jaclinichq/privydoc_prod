@@ -315,7 +315,7 @@ export async function syncWithSupabase() {
         localStorage.setItem(KEYS.PRICING, JSON.stringify(normalizedPricing));
       }
     } catch (pricingErr) {
-      // Swallowed safely - Supabase might not have this optional table yet
+      console.error("[syncWithSupabase] pricing fetch/normalize failed", pricingErr);
     }
   } catch (e) {
     console.warn("Supabase live sync is loading or unavailable. Using LocalStorage fallback.", e);
@@ -1511,9 +1511,11 @@ export const pricingApi = {
     // Attempt live replication to Supabase - table uses the app_config key/value/description
     // convention, not price/name, so write "value" (text) rather than "price".
     pricing.forEach(p => {
-      supabaseUpdate("pricing", `id=eq.${p.id}`, { value: String(p.price), description: p.description }).catch(e => {
-        // Safe to swallow, if table doesn't exist
-      });
+      const payload = { value: String(p.price), description: p.description };
+      console.log("[pricingApi.updateAll] sending", { id: p.id, payload });
+      supabaseUpdate("pricing", `id=eq.${p.id}`, payload)
+        .then(res => console.log("[pricingApi.updateAll] Supabase update succeeded for", p.id, res))
+        .catch(e => console.error("[pricingApi.updateAll] Supabase update FAILED for", p.id, e));
     });
 
     return { success: true };
@@ -1526,9 +1528,11 @@ export const pricingApi = {
       pricing[idx].price = price;
       localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
 
-      supabaseUpdate("pricing", `id=eq.${id}`, { value: String(price) }).catch(e => {
-        // Safe to swallow, if table doesn't exist
-      });
+      const payload = { value: String(price) };
+      console.log("[pricingApi.updatePrice] sending", { id, payload });
+      supabaseUpdate("pricing", `id=eq.${id}`, payload)
+        .then(res => console.log("[pricingApi.updatePrice] Supabase update succeeded for", id, res))
+        .catch(e => console.error("[pricingApi.updatePrice] Supabase update FAILED for", id, e));
 
       // Write audit log entry for price_changed
       supabaseInsert("audit_log", {

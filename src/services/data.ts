@@ -59,16 +59,22 @@ export const DATA = {
   },
 
   async patch(table: string, filter: string, body: any): Promise<any> {
-    const res = await fetch(`/api/data/${table}?${filter}`, {
+    const url = `/api/data/${table}?${filter}`;
+    const headers = getHeaders();
+    console.log("[DATA.patch] request", { url, headers, body });
+    const res = await fetch(url, {
       method: "PATCH",
-      headers: getHeaders(),
+      headers,
       body: JSON.stringify(body)
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
+      console.error("[DATA.patch] response NOT ok", { url, status: res.status, errorData });
       throw new Error(errorData.message || `Update failed for ${table}`);
     }
-    return res.json();
+    const data = await res.json();
+    console.log("[DATA.patch] response ok", { url, status: res.status, data });
+    return data;
   },
 
   async fn(edgeFn: string, body: any): Promise<any> {

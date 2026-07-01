@@ -530,8 +530,8 @@ app.patch("/api/data/:table", enforceAuthorization, async (req, res, next) => {
     const query = req.url.split("?")[1] || "";
     const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
 
-    if (table === "pricing") {
-      console.log("[pricing PATCH] table:", table, "query:", query, "body:", JSON.stringify(req.body));
+    if (table === "pricing" || table === "app_config") {
+      console.log(`[${table} PATCH] table:`, table, "query:", query, "body:", JSON.stringify(req.body));
     }
 
     const url = `${supabaseUrl}/rest/v1/${table}${query ? "?" + query : ""}`;
@@ -548,8 +548,8 @@ app.patch("/api/data/:table", enforceAuthorization, async (req, res, next) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      if (table === "pricing") {
-        console.log("[pricing PATCH] Supabase response NOT ok. status:", response.status, "error:", errorText);
+      if (table === "pricing" || table === "app_config") {
+        console.error(`[${table} PATCH] Supabase response NOT ok. status:`, response.status, "error:", errorText);
       }
       res.status(response.status).json({ ok: false, code: "UPDATE_FAILED", message: errorText });
       return;
@@ -557,8 +557,8 @@ app.patch("/api/data/:table", enforceAuthorization, async (req, res, next) => {
 
     const data = await response.json();
 
-    if (table === "pricing") {
-      console.log("[pricing PATCH] Supabase response ok. data:", JSON.stringify(data));
+    if (table === "pricing" || table === "app_config") {
+      console.log(`[${table} PATCH] Supabase response ok. data:`, JSON.stringify(data));
     }
 
     // Invalidate app_config cache on edits

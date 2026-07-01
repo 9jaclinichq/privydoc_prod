@@ -1786,7 +1786,7 @@ app.post("/api/payment/verify", async (req, res, next) => {
     let isVerified = false;
     let actualAmount = amount;
 
-    if (transaction_id && (transaction_id.startsWith("pd_bypass_") || transaction_id.startsWith("dev_tx_") || transaction_id.startsWith("test_pd_"))) {
+    if (transaction_id && (String(transaction_id).startsWith("pd_bypass_") || String(transaction_id).startsWith("dev_tx_") || String(transaction_id).startsWith("test_pd_"))) {
       console.warn("Test mode/bypass transaction detected, auto-verifying: ", transaction_id);
       isVerified = true;
     } else if (!flwSecretKey) {

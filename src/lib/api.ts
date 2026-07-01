@@ -298,7 +298,16 @@ export async function syncWithSupabase() {
     try {
       const dbPricing = await supabaseFetch("pricing");
       if (Array.isArray(dbPricing) && dbPricing.length > 0) {
-        localStorage.setItem(KEYS.PRICING, JSON.stringify(dbPricing));
+        const normalizedPricing = dbPricing.map((row: any) => {
+          const fallback = DEFAULT_PRICING.find(p => p.id === row.id);
+          return {
+            id: row.id,
+            name: row.name ?? fallback?.name ?? "",
+            price: row.price ?? fallback?.price ?? 0,
+            description: row.description ?? fallback?.description ?? ""
+          };
+        });
+        localStorage.setItem(KEYS.PRICING, JSON.stringify(normalizedPricing));
       }
     } catch (pricingErr) {
       // Swallowed safely - Supabase might not have this optional table yet

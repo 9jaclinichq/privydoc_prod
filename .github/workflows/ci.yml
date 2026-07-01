@@ -106,7 +106,7 @@ jobs:
               --allow-unauthenticated \
               --revision-suffix=${{ github.sha }} \
               --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest" \
-              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
           else
             echo "Service privydoc-app does not exist yet. Deploying initial revision."
             gcloud run deploy privydoc-app \
@@ -116,7 +116,7 @@ jobs:
               --allow-unauthenticated \
               --revision-suffix=${{ github.sha }} \
               --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest" \
-              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
+              --set-env-vars="NODE_ENV=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_ROLE=${{ secrets.SUPABASE_SERVICE_ROLE }},ADMIN_PIN=${{ secrets.ADMIN_PIN }},WHATSAPP_ACCESS_TOKEN=${{ secrets.WHATSAPP_ACCESS_TOKEN }},WHATSAPP_PHONE_NUMBER_ID=${{ secrets.WHATSAPP_PHONE_NUMBER_ID }},VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }},TERMII_API_KEY=${{ secrets.TERMII_API_KEY }},SELAR_SECRET_KEY=${{ secrets.SELAR_SECRET_KEY }},FLW_WEBHOOK_HASH=${{ secrets.FLW_WEBHOOK_HASH }},FLW_SECRET_KEY=${{ secrets.FLW_SECRET_KEY }},FLW_ENCRYPTION_KEY=${{ secrets.FLW_ENCRYPTION_KEY }},VITE_FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},FLW_PUBLIC_KEY=${{ secrets.VITE_FLW_PUBLIC_KEY }},RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}"
           fi
 
       - name: Run Staging Smoke Suite

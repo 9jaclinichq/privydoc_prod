@@ -1506,10 +1506,11 @@ export const pricingApi = {
 
   updateAll: (pricing: PricingConfig[]): { success: boolean } => {
     localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
-    
-    // Attempt live replication to Supabase if any pricing table exists
+
+    // Attempt live replication to Supabase - table uses the app_config key/value/description
+    // convention, not price/name, so write "value" (text) rather than "price".
     pricing.forEach(p => {
-      supabaseUpdate("pricing", `id=eq.${p.id}`, { price: p.price, name: p.name, description: p.description }).catch(e => {
+      supabaseUpdate("pricing", `id=eq.${p.id}`, { value: String(p.price), description: p.description }).catch(e => {
         // Safe to swallow, if table doesn't exist
       });
     });
@@ -1523,8 +1524,8 @@ export const pricingApi = {
     if (idx !== -1) {
       pricing[idx].price = price;
       localStorage.setItem(KEYS.PRICING, JSON.stringify(pricing));
-      
-      supabaseUpdate("pricing", `id=eq.${id}`, { price }).catch(e => {
+
+      supabaseUpdate("pricing", `id=eq.${id}`, { value: String(price) }).catch(e => {
         // Safe to swallow, if table doesn't exist
       });
 

@@ -827,6 +827,13 @@ export default function App() {
           logo: "https://app.privydoc.com.ng/pwa_logo.svg"
         },
         callback: async (response: any) => {
+          console.log("FLW CALLBACK FIRED", {
+            response,
+            tx_ref,
+            transaction_id: response.transaction_id || response.id,
+            status: response.status
+          });
+
           if (response.status !== "successful") {
             setIsSubmittingIntake(false);
             toast.error("Payment was not completed. Please try again.");
@@ -836,31 +843,37 @@ export default function App() {
 
           try {
             // Verify payment server-side
+            const verifyBody = {
+              transaction_id,
+              tx_ref,
+              amount,
+              payment_type: "new",
+              patient_phone: patientPhone,
+              patient_name: patientName,
+              patient_age: parseInt(patientAge) || 30,
+              condition_title: selectedCondition.title,
+              duration: intakeAnswers["duration"] || "3-6 months",
+              raw_answers: answers
+            };
+            console.log("[POST /api/payment/verify] request body", verifyBody);
+
             const res = await fetch("/api/payment/verify", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json"
               },
-              body: JSON.stringify({
-                transaction_id,
-                tx_ref,
-                amount,
-                payment_type: "new",
-                patient_phone: patientPhone,
-                patient_name: patientName,
-                patient_age: parseInt(patientAge) || 30,
-                condition_title: selectedCondition.title,
-                duration: intakeAnswers["duration"] || "3-6 months",
-                raw_answers: answers
-              })
+              body: JSON.stringify(verifyBody)
             });
 
             if (!res.ok) {
               const errData = await res.json().catch(() => ({}));
+              console.log("[POST /api/payment/verify] response NOT ok", { status: res.status, errData });
               throw new Error(errData.message || "Server verification of transaction failed.");
             }
 
             const data = await res.json();
+            console.log("[POST /api/payment/verify] response ok", { status: res.status, data });
+
             if (data.ok && data.consultation) {
               // Save to LocalStorage list to sync client state
               const cachedCons = JSON.parse(localStorage.getItem("privydoc_consultations") || "[]");
@@ -871,10 +884,16 @@ export default function App() {
               localStorage.removeItem("privydoc_pending_intake");
 
               paymentSuccessful = true;
+              console.log("[payment verify succeeded] applying state changes", {
+                setCheckoutStep: "success",
+                consultation: data.consultation,
+                consultation_stage: data.consultation?.stage
+              });
               setCheckoutStep("success");
               setSelectedCase(data.consultation);
               triggerRefresh();
             } else {
+              console.log("[payment verify] data.ok/data.consultation falsy, no state change applied", data);
               toast.error(data.message || "Payment verification failed.");
             }
           } catch (e: any) {
@@ -885,6 +904,7 @@ export default function App() {
           }
         },
         onclose: () => {
+          console.log("FLW ONCLOSE FIRED", { paymentSuccessful });
           if (!paymentSuccessful) {
             setIsSubmittingIntake(false);
             onPaymentCancelled?.();

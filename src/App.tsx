@@ -839,6 +839,15 @@ export default function App() {
             toast.error("Payment was not completed. Please try again.");
             return;
           }
+
+          // Mark the transaction as Flutterwave-successful immediately (synchronously),
+          // before any awaited work below. Flutterwave's inline SDK closes the modal
+          // (firing onclose) right after invoking this callback - it does not wait for
+          // this async function's internal promise to settle. Setting the flag only
+          // after the /api/payment/verify round-trip resolved meant onclose could read
+          // it while still false and wrongly treat a successful payment as a cancellation.
+          paymentSuccessful = true;
+
           const transaction_id = response.transaction_id || response.id;
 
           try {
@@ -883,7 +892,6 @@ export default function App() {
               localStorage.removeItem("privydoc_pending_payment");
               localStorage.removeItem("privydoc_pending_intake");
 
-              paymentSuccessful = true;
               console.log("[payment verify succeeded] applying state changes", {
                 setCheckoutStep: "success",
                 consultation: data.consultation,

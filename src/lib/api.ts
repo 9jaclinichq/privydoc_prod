@@ -602,6 +602,9 @@ export const consultationApi = {
       const rows = await supabaseFetch("consultations", `?id=eq.${id}`);
       if (Array.isArray(rows) && rows.length > 0) {
         const fresh = mapConsultationFromSupabase(rows[0]);
+        if (import.meta.env.DEV && !fresh.thread_id) {
+          console.warn("[refreshConsultation] thread_id is null/undefined while polling", { consultation_id: id });
+        }
         const consultations = consultationApi.getAll();
         const idx = consultations.findIndex(c => c.id === id);
         if (idx !== -1) {
@@ -627,6 +630,9 @@ export const consultationApi = {
         consultations[index] = fresh;
       }
 
+      if (import.meta.env.DEV && !consultations[index].thread_id) {
+        console.warn("[addMessage] thread_id is null/undefined while sending", { consultation_id: id, sender });
+      }
       const threadId = consultations[index].thread_id || "thread_" + id;
       consultations[index].thread_id = threadId;
 

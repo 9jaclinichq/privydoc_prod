@@ -751,7 +751,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                         <div key={c.id} className="p-4 bg-black rounded-xl border border-zinc-900 space-y-3">
                           <div>
                             <span className="font-bold text-white block text-xs">{c.condition}</span>
-                            <span className="text-[9.5px] text-zinc-500 font-mono mt-0.5 block">File ID: {c.id} • Age: {c.patient_age}</span>
+                            <span className="text-[9.5px] text-zinc-500 font-mono mt-0.5 block">File ID: {formatConsultationRef(c.id)} • Age: {c.patient_age}</span>
                           </div>
                           
                           <div className="text-[10.5px] text-zinc-400 space-y-1 leading-relaxed italic border-l border-zinc-800 pl-2">
@@ -948,7 +948,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             if (msg.sender === "system") {
                               return (
                                 <div key={msg.id} className="text-center py-0.5">
-                                  <span className="inline-block px-3 py-0.5 text-[9px] text-zinc-500 italic">
+                                  <span className="inline-block px-3 py-0.5 text-sm text-gray-400 italic">
                                     {msg.text}
                                   </span>
                                 </div>
@@ -957,12 +957,16 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             const isDoctor = msg.sender === "doctor";
                             return (
                               <div key={msg.id} className={`flex flex-col ${isDoctor ? "items-end" : "items-start"}`}>
-                                <div className={`max-w-[240px] rounded-2xl px-3 py-2.5 ${
-                                  isDoctor ? "bg-[#d4af37] text-black font-semibold rounded-tr-sm" : "bg-zinc-900 text-zinc-200 rounded-tl-sm"
-                                }`}>
+                                <div
+                                  className={`max-w-[240px] px-3 py-2.5 ${isDoctor ? "text-black font-semibold" : "text-white"}`}
+                                  style={{
+                                    backgroundColor: isDoctor ? "#C9A84C" : "#2a2a2a",
+                                    borderRadius: isDoctor ? "18px 18px 4px 18px" : "18px 18px 18px 4px"
+                                  }}
+                                >
                                   <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                                 </div>
-                                <span className="text-[9px] text-zinc-500 mt-1 px-1 font-mono">
+                                <span className="text-xs text-gray-500 mt-1 px-1 font-mono">
                                   {msg.sender_name} • {formatChatTimestamp(msg.timestamp)}
                                 </span>
                               </div>

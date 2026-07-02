@@ -804,7 +804,7 @@ export default function PatientPortal({
                           if (msg.sender === "system") {
                             return (
                               <div key={msg.id} className="text-center py-1">
-                                <span className="inline-block px-3 py-0.5 text-[10px] text-zinc-500 italic">
+                                <span className="inline-block px-3 py-0.5 text-sm text-gray-400 italic">
                                   {msg.text}
                                 </span>
                               </div>
@@ -814,14 +814,16 @@ export default function PatientPortal({
                           const isPatient = msg.sender === "patient";
                           return (
                             <div key={msg.id} className={`flex flex-col ${isPatient ? "items-end" : "items-start"}`}>
-                              <div className={`max-w-[280px] rounded-2xl px-3.5 py-2.5 ${
-                                isPatient
-                                  ? "bg-[#d4af37] text-black font-semibold rounded-tr-sm"
-                                  : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-sm"
-                              }`}>
+                              <div
+                                className={`max-w-[280px] px-3.5 py-2.5 ${isPatient ? "text-black font-semibold" : "text-white"}`}
+                                style={{
+                                  backgroundColor: isPatient ? "#C9A84C" : "#2a2a2a",
+                                  borderRadius: isPatient ? "18px 18px 4px 18px" : "18px 18px 18px 4px"
+                                }}
+                              >
                                 <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                               </div>
-                              <span className="text-[9px] text-zinc-500 mt-1 px-1 font-mono">
+                              <span className="text-xs text-gray-500 mt-1 px-1 font-mono">
                                 {msg.sender_name} • {formatChatTimestamp(msg.timestamp)}
                               </span>
                             </div>

@@ -102,12 +102,9 @@ export default function PatientPortal({
   const [editState, setEditState] = useState<string>(patientState);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
-  // Email verification state. There is no email_verified column on the patients
-  // table (confirmed - not in migrations, not in the Patient type, not read/written
-  // by mapPatientFromSupabase/mapPatientToSupabase or /api/patient/profile), so this
-  // is tracked locally per-phone-number rather than risking a write to a column that
-  // may not exist on the live table. Phone is always verified: OTP verification is a
-  // mandatory, unbypassable step of patient registration (see App.tsx handlePatientOtpSubmit).
+  // Email verification state, backed by the real email_verified column on the
+  // patients table (read via GET /api/patient/profile, persisted via
+  // POST /api/patient/verify-email after a successful email OTP verify).
   const [emailVerified, setEmailVerified] = useState<boolean>(false);
   const [showEmailOtpInput, setShowEmailOtpInput] = useState<boolean>(false);
   const [emailOtpCode, setEmailOtpCode] = useState<string>("");
@@ -115,9 +112,17 @@ export default function PatientPortal({
   const [verifyingEmailOtp, setVerifyingEmailOtp] = useState<boolean>(false);
 
   useEffect(() => {
-    if (patientPhone) {
-      setEmailVerified(localStorage.getItem(`privydoc_email_verified_${patientPhone}`) === "true");
-    }
+    if (!patientPhone) return;
+    let cancelled = false;
+    fetch(`/api/patient/profile?phone=${encodeURIComponent(patientPhone)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled && data.ok && data.patient) {
+          setEmailVerified(!!data.patient.email_verified);
+        }
+      })
+      .catch(e => console.error("Failed to fetch patient profile verification status:", e));
+    return () => { cancelled = true; };
   }, [patientPhone]);
 
   const handleSendEmailVerification = async () => {
@@ -142,11 +147,20 @@ export default function PatientPortal({
     try {
       const res = await patientApi.verifyOtp(patientPhone, emailOtpCode.trim());
       if (res.success) {
-        localStorage.setItem(`privydoc_email_verified_${patientPhone}`, "true");
-        setEmailVerified(true);
-        setShowEmailOtpInput(false);
-        setEmailOtpCode("");
-        toast.success("Email verified successfully.");
+        const verifyRes = await fetch("/api/patient/verify-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: patientPhone })
+        });
+        const verifyData = await verifyRes.json().catch(() => ({}));
+        if (verifyRes.ok && verifyData.ok) {
+          setEmailVerified(true);
+          setShowEmailOtpInput(false);
+          setEmailOtpCode("");
+          toast.success("Email verified successfully.");
+        } else {
+          toast.error(verifyData.message || "Could not save verification status. Please try again.");
+        }
       } else {
         toast.error(res.error || "Incorrect or expired verification code.");
       }

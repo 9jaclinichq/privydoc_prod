@@ -1212,9 +1212,57 @@ app.post("/api/auth/patient/login", rateLimiter("patientLogin", 5, 1 * 60 * 1000
   }
 });
 
-// Update patient profile (first name, email, state). Phone is the identity key and is never changed here.
+// Fetch patient profile (including email_verified) by phone.
+app.get("/api/patient/profile", async (req, res) => {
+  const phone = req.query.phone as string | undefined;
+  if (!phone) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
+  }
+
+  try {
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+    const sanitizedPhone = normPhone(phone);
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
+      method: "GET",
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to read patients table");
+    }
+
+    const patients = await response.json();
+    if (!Array.isArray(patients) || patients.length === 0) {
+      return res.status(404).json({ ok: false, code: "NOT_FOUND", message: "Patient account not found." });
+    }
+
+    const patient = patients[0];
+    res.json({
+      ok: true,
+      patient: {
+        id: patient.id,
+        name: patient.first_name || patient.name,
+        phone: patient.phone,
+        age: patient.age_dob || patient.age,
+        state: patient.state,
+        email: patient.email,
+        email_verified: !!patient.email_verified
+      }
+    });
+  } catch (error) {
+    console.error("Patient profile fetch error:", error);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Profile fetch service offline." });
+  }
+});
+
+// Update patient profile (first name, email, state, email_verified). Phone is the identity key and is never changed here.
 app.patch("/api/patient/profile", async (req, res) => {
-  const { phone, first_name, email, state } = req.body;
+  const { phone, first_name, email, state, email_verified } = req.body;
   if (!phone) {
     return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
   }
@@ -1227,6 +1275,7 @@ app.patch("/api/patient/profile", async (req, res) => {
     if (first_name !== undefined) updates.first_name = first_name;
     if (email !== undefined) updates.email = email;
     if (state !== undefined) updates.state = state;
+    if (email_verified !== undefined) updates.email_verified = email_verified;
 
     const response = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
       method: "PATCH",
@@ -1257,12 +1306,51 @@ app.patch("/api/patient/profile", async (req, res) => {
         phone: patient.phone,
         age: patient.age_dob || patient.age,
         state: patient.state,
-        email: patient.email
+        email: patient.email,
+        email_verified: !!patient.email_verified
       }
     });
   } catch (error) {
     console.error("Patient profile update error:", error);
     res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Profile update service offline." });
+  }
+});
+
+// Mark a patient's email as verified after successful email OTP verification.
+app.post("/api/patient/verify-email", async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Phone number is required." });
+  }
+
+  try {
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+    const sanitizedPhone = normPhone(phone);
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/patients?phone=eq.${encodeURIComponent(sanitizedPhone)}`, {
+      method: "PATCH",
+      headers: {
+        apikey: supabaseServiceKey,
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify({ email_verified: true })
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update patients table");
+    }
+
+    const patients = await response.json();
+    if (!Array.isArray(patients) || patients.length === 0) {
+      return res.status(404).json({ ok: false, code: "NOT_FOUND", message: "Patient account not found." });
+    }
+
+    res.json({ ok: true, email_verified: true });
+  } catch (error) {
+    console.error("Patient email verification error:", error);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Email verification service offline." });
   }
 });
 

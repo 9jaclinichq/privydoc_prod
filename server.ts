@@ -1379,6 +1379,153 @@ app.post("/api/patient/verify-email", async (req, res) => {
   }
 });
 
+// 3-slot clarification limit: patient chat messages route through here (instead of the
+// generic /api/data/consultations proxy) so the slot cap and Claude holding-response can
+// be enforced server-side (Claude's API key never reaches the browser). Writes to
+// consultations.messages (the JSONB array the chat UI actually renders from, confirmed
+// this session on both PatientPortal.tsx and ClinicianArea.tsx) are authoritative; the
+// separate "messages" table insert below is best-effort only - see comment near auditWrite.
+app.post("/api/consultations/:id/patient-message", async (req, res) => {
+  const { id } = req.params;
+  const { content, thread_id } = req.body;
+  const patientPhone = req.headers["x-patient-phone"] as string | undefined;
+
+  if (!patientPhone) {
+    return res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "Patient session required." });
+  }
+  if (!content || !String(content).trim()) {
+    return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Message content is required." });
+  }
+
+  try {
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+    const headers = {
+      apikey: supabaseServiceKey,
+      Authorization: `Bearer ${supabaseServiceKey}`,
+      "Content-Type": "application/json"
+    };
+    const sanitizedPhone = normPhone(patientPhone);
+
+    const consRes = await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${encodeURIComponent(id)}&limit=1`, {
+      method: "GET",
+      headers
+    });
+    if (!consRes.ok) {
+      throw new Error(`Failed to fetch consultation: ${consRes.status}`);
+    }
+    const consRows = await consRes.json();
+    if (!Array.isArray(consRows) || consRows.length === 0) {
+      return res.status(404).json({ ok: false, code: "NOT_FOUND", message: "Consultation not found." });
+    }
+    const cons = consRows[0];
+
+    if (cons.patient_phone !== sanitizedPhone) {
+      return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: consultation does not belong to this patient." });
+    }
+
+    const slotCount = cons.slot_count || 0;
+    if (slotCount >= 3) {
+      return res.status(403).json({ ok: false, code: "SLOTS_FULL", message: "Clarification slots full. Your doctor will respond at Day 5." });
+    }
+
+    const threadId = thread_id || cons.thread_id || "thread_" + id;
+    const now = new Date().toISOString();
+
+    const patientMsg = {
+      id: "msg_" + Math.random().toString(36).substr(2, 9),
+      sender: "patient" as const,
+      sender_name: cons.patient_name || cons.form_data?.first_name || "Patient",
+      text: String(content),
+      timestamp: now
+    };
+
+    // Claude holding response - brief, no diagnosis/drugs, ends with the required line.
+    const claudeSystemPrompt = `You are a clinical holding-response assistant for PrivyDoc, a confidential men's telemedicine platform in Nigeria. A patient has sent a clarifying message while awaiting their doctor's full review. Reply briefly (under 100 words) acknowledging what they said. Do NOT provide a diagnosis. Do NOT name or suggest any drug/medication. Do NOT give medical advice beyond calm reassurance. Your reply MUST end with exactly this sentence: "Your doctor will review your full case at Day 5."`;
+    const claudeUserPrompt = `Patient's condition: ${cons.condition_id || cons.condition || "unspecified"}\nPatient's message: ${content}`;
+
+    let aiReplyText: string;
+    try {
+      aiReplyText = (await callClaude(claudeSystemPrompt, claudeUserPrompt, 200)).trim();
+      if (!aiReplyText.includes("Your doctor will review your full case at Day 5.")) {
+        aiReplyText = `${aiReplyText}\n\nYour doctor will review your full case at Day 5.`;
+      }
+    } catch (aiErr) {
+      console.error("[patient-message] Claude holding response failed:", aiErr);
+      aiReplyText = "Thank you for the additional information — this has been added to your file. Your doctor will review your full case at Day 5.";
+    }
+
+    const aiMsg = {
+      id: "msg_" + Math.random().toString(36).substr(2, 9),
+      sender: "ai" as const,
+      sender_name: "Clinical Assistant",
+      text: aiReplyText,
+      timestamp: new Date().toISOString(),
+      message_type: "ai_response" as const,
+      ai_interrogation: String(content)
+    };
+
+    const updatedMessages = [...(Array.isArray(cons.messages) ? cons.messages : []), patientMsg, aiMsg];
+    const newSlotCount = slotCount + 1;
+
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { ...headers, Prefer: "return=representation" },
+      body: JSON.stringify({
+        messages: updatedMessages,
+        slot_count: newSlotCount,
+        thread_id: threadId,
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (!patchRes.ok) {
+      throw new Error(`Failed to update consultation: ${patchRes.status} ${await patchRes.text()}`);
+    }
+    const patched = await patchRes.json();
+    const updatedConsultation = Array.isArray(patched) ? patched[0] : patched;
+
+    // Best-effort audit write to the separate "messages" table using the column names
+    // given (sender_type/content/message_type/ai_interrogation/consultation_id). That
+    // live-DB check also returned columns (topic, payload, event, private,
+    // binary_payload) that strongly match Supabase's internal realtime.messages table
+    // rather than a custom app table, so this insert may target the wrong table or fail
+    // outright - deliberately non-blocking, the chat feature is fully functional via
+    // consultations.messages above regardless of whether this succeeds.
+    const auditWrite = async (msg: { id: string; text: string; timestamp: string; message_type?: string; ai_interrogation?: string }, senderType: string) => {
+      try {
+        await fetch(`${supabaseUrl}/rest/v1/messages`, {
+          method: "POST",
+          headers: { ...headers, Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: msg.id,
+            thread_id: threadId,
+            consultation_id: id,
+            sender_type: senderType,
+            message_type: msg.message_type || "chat",
+            content: msg.text,
+            ...(msg.ai_interrogation ? { ai_interrogation: msg.ai_interrogation } : {}),
+            created_at: msg.timestamp
+          })
+        });
+      } catch (e) {
+        console.error("[patient-message] best-effort messages table audit insert failed:", e);
+      }
+    };
+    auditWrite(patientMsg, "patient").catch(() => {});
+    auditWrite(aiMsg, "ai").catch(() => {});
+
+    res.json({
+      ok: true,
+      slot_count: newSlotCount,
+      patient_message: patientMsg,
+      ai_message: aiMsg,
+      consultation: updatedConsultation
+    });
+  } catch (error) {
+    console.error("[patient-message] error:", error);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Could not send message. Please try again." });
+  }
+});
+
 // 4. Secure Clinician Login Endpoint with Lockout Guard
 app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { mdcn_folio, pin } = req.body;

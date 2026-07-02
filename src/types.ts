@@ -35,10 +35,13 @@ export interface Patient {
 
 export interface ChatMessage {
   id: string;
-  sender: "patient" | "doctor" | "system";
+  sender: "patient" | "doctor" | "system" | "ai";
   sender_name: string;
   text: string;
   timestamp: string;
+  // 3-slot clarification feature: set on the AI holding-response message.
+  message_type?: "chat" | "ai_response";
+  ai_interrogation?: string; // the patient's original message that prompted this AI reply
 }
 
 export interface Consultation {

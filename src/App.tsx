@@ -1453,15 +1453,38 @@ export default function App() {
     }
   };
 
-  // Patient chat send
+  // Patient chat send — routes through the server (not the client-side addMessage path)
+  // so the 3-slot clarification limit and Claude holding-response can be enforced.
   const handleSendPatientMsg = async () => {
-    if (!selectedCase || !patientMessage.trim()) return;
-    const res = await consultationApi.addMessage(selectedCase.id, "patient", selectedCase.patient_name, patientMessage);
-    console.log("[handleSendPatientMsg] result", res);
-    if (res.success) {
+    if (!selectedCase || !patientMessage.trim() || !patientSession) return;
+    const messageToSend = patientMessage;
+    try {
+      const res = await fetch(`/api/consultations/${selectedCase.id}/patient-message`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-patient-phone": patientSession.phone
+        },
+        body: JSON.stringify({ content: messageToSend, thread_id: selectedCase.thread_id })
+      });
+      const data = await res.json().catch(() => ({}));
+      console.log("[handleSendPatientMsg] result", data);
+
+      if (res.status === 403 && data.code === "SLOTS_FULL") {
+        toast.error(data.message || "Clarification slots full. Your doctor will respond at Day 5.");
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        toast.error(data.message || "Could not send message. Please try again.");
+        return;
+      }
+
       setPatientMessage("");
-      if (res.consultation) setSelectedCase(res.consultation);
+      if (data.consultation) setSelectedCase(data.consultation);
       triggerRefresh();
+    } catch (e) {
+      console.error("[handleSendPatientMsg] failed:", e);
+      toast.error("Could not send message. Please try again.");
     }
   };
 

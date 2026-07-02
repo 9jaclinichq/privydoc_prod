@@ -941,10 +941,13 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             <Lock className="w-2.5 h-2.5" /> AES Encrypted
                           </span>
                         </div>
+                        <p className="text-xs text-gray-400 px-4 pt-2 shrink-0">
+                          Patient slots used: {selectedDoctorCase.slot_count || 0}/3
+                        </p>
 
                         {/* Messages Area */}
                         <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-black/10 text-xs">
-                          {selectedDoctorCase.messages.map(msg => {
+                          {selectedDoctorCase.messages.map((msg, idx, arr) => {
                             if (msg.sender === "system") {
                               return (
                                 <div key={msg.id} className="text-center py-0.5">
@@ -954,7 +957,27 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                                 </div>
                               );
                             }
+
+                            if (msg.message_type === "ai_response" || msg.sender === "ai") {
+                              return (
+                                <div key={msg.id} className="flex flex-col items-start">
+                                  <span className="text-xs font-bold mb-1 px-1" style={{ color: "#C9A84C" }}>Clinical Assistant</span>
+                                  <div
+                                    className="max-w-[240px] px-3 py-2.5 text-white"
+                                    style={{ backgroundColor: "#1a2a1a", borderRadius: "18px 18px 18px 4px" }}
+                                  >
+                                    <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                  </div>
+                                  <span className="text-xs text-gray-500 mt-1 px-1 font-mono">
+                                    {formatChatTimestamp(msg.timestamp)}
+                                  </span>
+                                </div>
+                              );
+                            }
+
                             const isDoctor = msg.sender === "doctor";
+                            const nextMsg = arr[idx + 1];
+                            const showAskedCaption = msg.sender === "patient" && nextMsg?.message_type === "ai_response";
                             return (
                               <div key={msg.id} className={`flex flex-col ${isDoctor ? "items-end" : "items-start"}`}>
                                 <div
@@ -969,6 +992,11 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                                 <span className="text-xs text-gray-500 mt-1 px-1 font-mono">
                                   {msg.sender_name} • {formatChatTimestamp(msg.timestamp)}
                                 </span>
+                                {showAskedCaption && (
+                                  <span className="text-xs text-gray-400 italic mt-1 px-1">
+                                    Patient asked: {nextMsg?.ai_interrogation}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}

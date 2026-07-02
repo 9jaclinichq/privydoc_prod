@@ -789,6 +789,10 @@ export default function PatientPortal({
                       </div>
                     </div>
 
+                    <p className="text-xs text-gray-400 px-5 pt-2">
+                      Slots remaining: {Math.max(0, 3 - (selectedCase.slot_count || 0))}
+                    </p>
+
                     {/* Messages Body */}
                     <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-black/30 text-xs">
                       {selectedCase.messages.length === 0 ? (
@@ -806,6 +810,23 @@ export default function PatientPortal({
                               <div key={msg.id} className="text-center py-1">
                                 <span className="inline-block px-3 py-0.5 text-sm text-gray-400 italic">
                                   {msg.text}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          if (msg.message_type === "ai_response" || msg.sender === "ai") {
+                            return (
+                              <div key={msg.id} className="flex flex-col items-start">
+                                <span className="text-xs font-bold mb-1 px-1" style={{ color: "#C9A84C" }}>Clinical Assistant</span>
+                                <div
+                                  className="max-w-[280px] px-3.5 py-2.5 text-white"
+                                  style={{ backgroundColor: "#1a2a1a", borderRadius: "18px 18px 18px 4px" }}
+                                >
+                                  <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                </div>
+                                <span className="text-xs text-gray-500 mt-1 px-1 font-mono">
+                                  {formatChatTimestamp(msg.timestamp)}
                                 </span>
                               </div>
                             );
@@ -833,7 +854,15 @@ export default function PatientPortal({
                     </div>
 
                     {/* Messages Input Box */}
-                    {selectedCase.status !== "completed" ? (
+                    {selectedCase.status === "completed" ? (
+                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic shrink-0">
+                        Consultation file closed. Digital prescription has been issued in the reports tab.
+                      </div>
+                    ) : (selectedCase.slot_count || 0) >= 3 ? (
+                      <div className="p-3.5 bg-zinc-900/40 border-t border-zinc-900 text-center text-xs text-gray-400 shrink-0">
+                        Clarification slots full. Doctor responds Day 5.
+                      </div>
+                    ) : (
                       <div className="p-3 bg-zinc-900/10 border-t border-zinc-900 flex gap-2 shrink-0">
                         <input
                           type="text"
@@ -849,10 +878,6 @@ export default function PatientPortal({
                         >
                           <Send className="w-4 h-4 text-black" />
                         </button>
-                      </div>
-                    ) : (
-                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic shrink-0">
-                        Consultation file closed. Digital prescription has been issued in the reports tab.
                       </div>
                     )}
                   </>

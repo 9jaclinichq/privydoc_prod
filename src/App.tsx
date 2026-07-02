@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Shield, Activity, Lock, Users, Laptop, Sparkles, ArrowLeft, HelpCircle, Info, Bell, MapPin, ChevronUp, ChevronDown, Menu, X, LogOut, Inbox, FileText, MessageSquare, PlusCircle, ListChecks, Wallet, LifeBuoy, LayoutDashboard, Stethoscope, ShieldCheck, Settings2, CreditCard } from "lucide-react";
 import { Doctor, Consultation, Patient } from "./types";
 import { doctorApi, consultationApi, adminApi, patientApi, pricingApi } from "./lib/api";
-import { MEN_HEALTH_CONDITIONS, INTAKE_QUESTIONS } from "./data";
+import { MEN_HEALTH_CONDITIONS } from "./data";
+import { INTAKE_QUESTIONS_BANK } from "./data/intakeQuestions";
 import { formatNaira, formatDate } from "./utils";
 
 // Custom Sub-Components
@@ -741,11 +742,24 @@ export default function App() {
     if (!selectedCondition) return;
     setIsSubmittingIntake(true);
 
-    const answers = INTAKE_QUESTIONS.filter(q => q.category === "general" || q.category === "safety" || q.category === selectedCondition.id)
-      .map(q => ({
-        question: q.text,
-        answer: intakeAnswers[q.id] || (q.id === "age" ? patientAge : q.id === "duration" ? intakeAnswers["duration"] || selectedCondition.durationOptions[0] : "Not specified")
-      }));
+    // Build raw_answers from the real adaptive intake answers (intakeAnswers, keyed by
+    // the q_-prefixed IDs from INTAKE_QUESTIONS_BANK/AdaptiveIntakeForm), not the older,
+    // disconnected INTAKE_QUESTIONS/data.ts set. That legacy set uses different IDs
+    // (e.g. "chest_pain" vs "q_ed_chest") that never matched intakeAnswers' keys, so
+    // almost every question resolved to the "Not specified" fallback and the patient's
+    // actual submitted answers (including cardiovascular safety answers, height/weight,
+    // blood pressure) never reached raw_answers sent to the server. Now every entry
+    // comes from the same field that now contains real answers.
+    const answers = Object.entries(intakeAnswers)
+      .map(([qId, value]) => {
+        const bankQuestion = INTAKE_QUESTIONS_BANK.find(q => q.id === qId);
+        if (!bankQuestion) return null;
+        return {
+          question: bankQuestion.text,
+          answer: Array.isArray(value) ? value.join(", ") : String(value)
+        };
+      })
+      .filter((a): a is { question: string; answer: string } => a !== null);
 
     // Read the checkout amount and Flutterwave public key dynamically from the
     // server-authoritative /api/config endpoint (backed by the same "pricing" table

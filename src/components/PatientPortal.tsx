@@ -6,7 +6,7 @@ import {
   CheckCircle2, AlertCircle
 } from "lucide-react";
 import { Consultation } from "../types";
-import { renderRichText } from "../utils";
+import { renderRichText, formatChatTimestamp } from "../utils";
 import { toast } from "./ToastNotification";
 import { MEN_HEALTH_CONDITIONS, NIGERIAN_STATES } from "../data";
 import { getSLAHours, ConsultationStage } from "../lifecycle";
@@ -753,7 +753,7 @@ export default function PatientPortal({
 
             {/* VIEW C: LIVE CHAT WINDOW */}
             {activeSidebarTab === "messages" && (
-              <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[520px] overflow-hidden shadow-xl animate-fade-in">
+              <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[calc(100dvh-220px)] lg:h-[600px] overflow-hidden shadow-xl animate-fade-in">
                 {!selectedCase ? (
                   <div className="flex-1 flex flex-col justify-center items-center text-center p-8 space-y-4">
                     <MessageSquare className="w-12 h-12 text-zinc-700 mx-auto animate-pulse" />
@@ -776,21 +776,26 @@ export default function PatientPortal({
                 ) : (
                   <>
                     {/* Chat Header */}
-                    <div className="px-5 py-4 border-b border-zinc-900 bg-zinc-900/10 flex justify-between items-center">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
-                        <div>
-                          <h4 className="text-xs font-bold text-white">Confidential Medical Desk Chat</h4>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">
+                    <div className="px-5 py-4 border-b border-zinc-900 bg-zinc-900/10 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse shrink-0" />
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-white truncate">Confidential Medical Desk Chat</h4>
+                          <p className="text-[10px] text-zinc-500 mt-0.5 truncate">
                             {selectedCase.doctor_name ? `Active Consultation with ${selectedCase.doctor_name}` : "Clinician pending pickup..."}
                           </p>
                         </div>
                       </div>
-                      <HelpCircle className="w-4 h-4 text-zinc-600" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                          <Lock className="w-2.5 h-2.5" /> AES Encrypted
+                        </span>
+                        <HelpCircle className="w-4 h-4 text-zinc-600" />
+                      </div>
                     </div>
 
                     {/* Messages Body */}
-                    <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-black/30 text-xs">
+                    <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-black/30 text-xs">
                       {selectedCase.messages.length === 0 ? (
                         <div className="text-center py-16 space-y-2">
                           <MessageSquare className="w-10 h-10 text-zinc-800 mx-auto" />
@@ -804,7 +809,7 @@ export default function PatientPortal({
                           if (msg.sender === "system") {
                             return (
                               <div key={msg.id} className="text-center py-1">
-                                <span className="inline-block px-2.5 py-0.5 bg-zinc-900 text-[9px] text-zinc-500 rounded-full">
+                                <span className="inline-block px-3 py-0.5 text-[10px] text-zinc-500 italic">
                                   {msg.text}
                                 </span>
                               </div>
@@ -813,20 +818,17 @@ export default function PatientPortal({
 
                           const isPatient = msg.sender === "patient";
                           return (
-                            <div key={msg.id} className={`flex ${isPatient ? "justify-end" : "justify-start"}`}>
-                              <div className={`max-w-[280px] rounded-2xl p-3.5 space-y-1 ${
-                                isPatient 
-                                  ? "bg-[#d4af37] text-black font-semibold rounded-tr-none" 
-                                  : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-none"
+                            <div key={msg.id} className={`flex flex-col ${isPatient ? "items-end" : "items-start"}`}>
+                              <div className={`max-w-[280px] rounded-2xl px-3.5 py-2.5 ${
+                                isPatient
+                                  ? "bg-[#d4af37] text-black font-semibold rounded-tr-sm"
+                                  : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-sm"
                               }`}>
-                                <span className="text-[8.5px] block opacity-75 uppercase font-mono tracking-wider font-extrabold">
-                                  {msg.sender_name}
-                                </span>
                                 <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                                <span className="text-[7.5px] block text-right opacity-60">
-                                  {formatDate(msg.timestamp).split(",")[1]?.trim() || "Just now"}
-                                </span>
                               </div>
+                              <span className="text-[9px] text-zinc-500 mt-1 px-1 font-mono">
+                                {msg.sender_name} • {formatChatTimestamp(msg.timestamp)}
+                              </span>
                             </div>
                           );
                         })
@@ -835,7 +837,7 @@ export default function PatientPortal({
 
                     {/* Messages Input Box */}
                     {selectedCase.status !== "completed" ? (
-                      <div className="p-3 bg-zinc-900/10 border-t border-zinc-900 flex gap-2">
+                      <div className="p-3 bg-zinc-900/10 border-t border-zinc-900 flex gap-2 shrink-0">
                         <input
                           type="text"
                           placeholder="Type confidential message to medical specialist..."
@@ -852,7 +854,7 @@ export default function PatientPortal({
                         </button>
                       </div>
                     ) : (
-                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic">
+                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic shrink-0">
                         Consultation file closed. Digital prescription has been issued in the reports tab.
                       </div>
                     )}

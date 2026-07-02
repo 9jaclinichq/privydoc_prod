@@ -28,6 +28,20 @@ export function formatDate(dateString: string): string {
   });
 }
 
+// WhatsApp-style chat timestamp: "01:27" for a message sent today, "Jul 2" for older
+// messages. Shared by both the doctor (ClinicianArea) and patient (PatientPortal)
+// chat views so timestamps read identically on both sides of the same conversation.
+export function formatChatTimestamp(dateString: string): string {
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (isToday) {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // Simple debounce helper
 export function debounce<T extends (...args: any[]) => void>(
   func: T,

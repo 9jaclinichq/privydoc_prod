@@ -592,10 +592,41 @@ export const consultationApi = {
     return { success: false };
   },
 
-  addMessage: (id: string, sender: "patient" | "doctor", senderName: string, text: string): { success: boolean; message?: ChatMessage } => {
+  // Fetch a single consultation fresh from Supabase (bypassing the local cache) and
+  // write it back into the cached list. Used by chat polling and by addMessage, so a
+  // message sent from one device is appended onto the OTHER party's latest messages
+  // instead of onto a possibly-stale local array (which previously overwrote whichever
+  // side hadn't synced yet when the full messages array was patched back).
+  refreshConsultation: async (id: string): Promise<Consultation | null> => {
+    try {
+      const rows = await supabaseFetch("consultations", `?id=eq.${id}`);
+      if (Array.isArray(rows) && rows.length > 0) {
+        const fresh = mapConsultationFromSupabase(rows[0]);
+        const consultations = consultationApi.getAll();
+        const idx = consultations.findIndex(c => c.id === id);
+        if (idx !== -1) {
+          consultations[idx] = fresh;
+        } else {
+          consultations.push(fresh);
+        }
+        localStorage.setItem(KEYS.CONSULTATIONS, JSON.stringify(consultations));
+        return fresh;
+      }
+    } catch (e) {
+      console.error("[refreshConsultation] failed to fetch latest consultation:", e);
+    }
+    return null;
+  },
+
+  addMessage: async (id: string, sender: "patient" | "doctor", senderName: string, text: string): Promise<{ success: boolean; message?: ChatMessage; consultation?: Consultation }> => {
+    const fresh = await consultationApi.refreshConsultation(id);
     const consultations = consultationApi.getAll();
     const index = consultations.findIndex(c => c.id === id);
     if (index !== -1) {
+      if (fresh) {
+        consultations[index] = fresh;
+      }
+
       const threadId = consultations[index].thread_id || "thread_" + id;
       consultations[index].thread_id = threadId;
 
@@ -606,7 +637,8 @@ export const consultationApi = {
         text,
         timestamp: new Date().toISOString()
       };
-      consultations[index].messages.push(newMsg);
+      console.log("[addMessage] sending", { consultation_id: id, thread_id: threadId, sender, text });
+      consultations[index].messages = [...(consultations[index].messages || []), newMsg];
       consultations[index].updated_at = new Date().toISOString();
 
       // Clinical Lifecycle state transition
@@ -654,9 +686,11 @@ export const consultationApi = {
         thread_id: threadId,
         responded_at: consultations[index].responded_at || null,
         updated_at: consultations[index].updated_at
-      }).catch(e => {
-        console.error("Live message replicate failed:", e);
-      });
+      })
+        .then(() => console.log("[addMessage] consultation.messages replicated to Supabase", { consultation_id: id, thread_id: threadId, message_count: consultations[index].messages.length }))
+        .catch(e => {
+          console.error("Live message replicate failed:", e);
+        });
 
       // Persist message to messages table
       supabaseInsert("messages", {
@@ -686,7 +720,7 @@ export const consultationApi = {
         console.error("Could not persist response_sent audit log:", e);
       });
 
-      return { success: true, message: newMsg };
+      return { success: true, message: newMsg, consultation: consultations[index] };
     }
     return { success: false };
   },

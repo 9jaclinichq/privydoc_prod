@@ -564,6 +564,35 @@ export default function App() {
     return () => clearInterval(interval);
   }, [patientSession, currentDoctor]);
 
+  // Poll the currently open consultation's messages every 5 seconds so a chat stays in
+  // sync between doctor and patient without either side needing to send a message or
+  // manually refresh first (previously there was no polling at all for messages).
+  useEffect(() => {
+    if (!selectedCase) return;
+    const caseId = selectedCase.id;
+    const interval = setInterval(async () => {
+      const fresh = await consultationApi.refreshConsultation(caseId);
+      if (fresh) {
+        console.log("[patient chat poll]", { consultation_id: caseId, message_count: fresh.messages.length });
+        setSelectedCase(prev => (prev && prev.id === caseId ? fresh : prev));
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [selectedCase?.id]);
+
+  useEffect(() => {
+    if (!selectedDoctorCase) return;
+    const caseId = selectedDoctorCase.id;
+    const interval = setInterval(async () => {
+      const fresh = await consultationApi.refreshConsultation(caseId);
+      if (fresh) {
+        console.log("[doctor chat poll]", { consultation_id: caseId, message_count: fresh.messages.length });
+        setSelectedDoctorCase(prev => (prev && prev.id === caseId ? fresh : prev));
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [selectedDoctorCase?.id]);
+
   const handleMarkNotificationRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     try {
@@ -1411,14 +1440,13 @@ export default function App() {
   };
 
   // Patient chat send
-  const handleSendPatientMsg = () => {
+  const handleSendPatientMsg = async () => {
     if (!selectedCase || !patientMessage.trim()) return;
-    const res = consultationApi.addMessage(selectedCase.id, "patient", selectedCase.patient_name, patientMessage);
+    const res = await consultationApi.addMessage(selectedCase.id, "patient", selectedCase.patient_name, patientMessage);
+    console.log("[handleSendPatientMsg] result", res);
     if (res.success) {
       setPatientMessage("");
-      // Reload current case
-      const updated = consultationApi.getById(selectedCase.id);
-      if (updated) setSelectedCase(updated);
+      if (res.consultation) setSelectedCase(res.consultation);
       triggerRefresh();
     }
   };
@@ -1478,7 +1506,7 @@ export default function App() {
   };
 
   // Doctor chat send
-  const handleSendDoctorMsg = () => {
+  const handleSendDoctorMsg = async () => {
     if (!selectedDoctorCase || !currentDoctor || !doctorMessage.trim()) return;
 
     const validation = validateTemplatePlaceholders(doctorMessage);
@@ -1487,11 +1515,11 @@ export default function App() {
       return;
     }
 
-    const res = consultationApi.addMessage(selectedDoctorCase.id, "doctor", currentDoctor.name, doctorMessage);
+    const res = await consultationApi.addMessage(selectedDoctorCase.id, "doctor", currentDoctor.name, doctorMessage);
+    console.log("[handleSendDoctorMsg] result", res);
     if (res.success) {
       setDoctorMessage("");
-      const updated = consultationApi.getById(selectedDoctorCase.id);
-      if (updated) setSelectedDoctorCase(updated);
+      if (res.consultation) setSelectedDoctorCase(res.consultation);
       triggerRefresh();
     }
   };

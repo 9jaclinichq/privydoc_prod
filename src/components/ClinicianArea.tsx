@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Doctor, Consultation } from "../types";
 import { consultationApi, doctorApi } from "../lib/api";
-import { renderRichText } from "../utils";
+import { renderRichText, formatChatTimestamp } from "../utils";
 import { getStageTitle, getSLAHours, ConsultationStage } from "../lifecycle";
 import { getTemplates, saveCustomTemplate, deleteCustomTemplate, validateTemplatePlaceholders, ResponseTemplate } from "../templates";
 import { generateConsultationPDF } from "../utils/pdfGenerator";
@@ -934,10 +934,12 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                     {/* Panel 2: Secure live chat (MD-Center/Right) */}
                     <div className="md:col-span-7 space-y-6">
                       
-                      <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[320px] overflow-hidden">
-                        <div className="px-4 py-3 bg-zinc-900/10 border-b border-zinc-900 flex justify-between items-center text-xs">
+                      <div className="bg-zinc-950 rounded-2xl border border-zinc-900 flex flex-col h-[420px] md:h-[520px] overflow-hidden">
+                        <div className="px-4 py-3 bg-zinc-900/10 border-b border-zinc-900 flex justify-between items-center text-xs shrink-0">
                           <span className="font-bold text-white">Direct Medical Dialogue</span>
-                          <span className="text-[9.5px] font-mono text-zinc-500">AES Encrypted</span>
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                            <Lock className="w-2.5 h-2.5" /> AES Encrypted
+                          </span>
                         </div>
 
                         {/* Messages Area */}
@@ -946,7 +948,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             if (msg.sender === "system") {
                               return (
                                 <div key={msg.id} className="text-center py-0.5">
-                                  <span className="inline-block px-2.5 py-0.5 bg-zinc-900 text-[8px] text-zinc-500 rounded-full">
+                                  <span className="inline-block px-3 py-0.5 text-[9px] text-zinc-500 italic">
                                     {msg.text}
                                   </span>
                                 </div>
@@ -954,13 +956,15 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             }
                             const isDoctor = msg.sender === "doctor";
                             return (
-                              <div key={msg.id} className={`flex ${isDoctor ? "justify-end" : "justify-start"}`}>
-                                <div className={`max-w-[240px] rounded-2xl p-3 space-y-1 ${
-                                  isDoctor ? "bg-[#d4af37] text-black font-semibold rounded-tr-none" : "bg-zinc-900 text-zinc-200 rounded-tl-none"
+                              <div key={msg.id} className={`flex flex-col ${isDoctor ? "items-end" : "items-start"}`}>
+                                <div className={`max-w-[240px] rounded-2xl px-3 py-2.5 ${
+                                  isDoctor ? "bg-[#d4af37] text-black font-semibold rounded-tr-sm" : "bg-zinc-900 text-zinc-200 rounded-tl-sm"
                                 }`}>
-                                  <span className="text-[8px] block opacity-75 uppercase font-mono tracking-wider font-extrabold">{msg.sender_name}</span>
                                   <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                                 </div>
+                                <span className="text-[9px] text-zinc-500 mt-1 px-1 font-mono">
+                                  {msg.sender_name} • {formatChatTimestamp(msg.timestamp)}
+                                </span>
                               </div>
                             );
                           })}
@@ -968,7 +972,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
 
                         {/* Send Inputs */}
                         {selectedDoctorCase.status !== "completed" ? (
-                          <div className="p-2 border-t border-zinc-900 flex gap-2">
+                          <div className="p-2 border-t border-zinc-900 flex gap-2 shrink-0">
                             <input
                               type="text"
                               placeholder="Reply with clinical instructions..."
@@ -982,7 +986,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                             </button>
                           </div>
                         ) : (
-                          <div className="p-2.5 bg-zinc-900/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 italic">
+                          <div className="p-2.5 bg-zinc-900/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 italic shrink-0">
                             Caseload file closed. Evaluation archived.
                           </div>
                         )}

@@ -30,6 +30,20 @@ ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS patient_rating inte
 ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS referral_text text;
 ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS notes text;
 
+-- Sprint 3: consultation lifecycle sweep columns (already applied directly to the live
+-- database; added here so the migration file matches reality and future environments
+-- provisioned from this file get them too).
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS assigned_at timestamptz;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS day2_reminder_sent boolean DEFAULT false;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS day4_alert_sent boolean DEFAULT false;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS forfeited boolean DEFAULT false;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS original_doctor_id text;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS credited_doctor_id text;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS closed_at timestamptz;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS docs_expire_at timestamptz;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS slot_count integer DEFAULT 0;
+ALTER TABLE IF EXISTS consultations ADD COLUMN IF NOT EXISTS slot_reset_at timestamptz;
+
 -- 2. Create canonical tables
 CREATE TABLE IF NOT EXISTS threads (
   id text PRIMARY KEY,

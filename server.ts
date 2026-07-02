@@ -2946,7 +2946,221 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
+// PD-XXXXXX reference formatting, matching formatConsultationRef() in src/utils.tsx.
+// Reimplemented inline here rather than imported, since server.ts is a separate Node/
+// esbuild bundle and doesn't pull in frontend .tsx files.
+function formatConsultationRefServer(id: string): string {
+  return `PD-${id.slice(-6).toUpperCase()}`;
+}
+
+// Consultation lifecycle sweep (Sprint 3): Day-2 patient reminder, Day-4 doctor alert,
+// Day-5 forfeit/reassignment. Runs once on server start, then every 30 minutes.
+async function runLifecycleSweep() {
+  const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+  const headers = {
+    apikey: supabaseServiceKey,
+    Authorization: `Bearer ${supabaseServiceKey}`,
+    "Content-Type": "application/json"
+  };
+  const writeHeaders = { ...headers, Prefer: "return=minimal" };
+
+  console.log("[runLifecycleSweep] starting sweep at", new Date().toISOString());
+
+  // ---- 1. DAY-2 PATIENT REMINDER ----
+  try {
+    const day2Cutoff = new Date(Date.now() - 47 * 60 * 60 * 1000).toISOString();
+    const day2Res = await fetch(
+      `${supabaseUrl}/rest/v1/consultations?status=eq.active&day2_reminder_sent=eq.false&assigned_at=not.is.null&assigned_at=lt.${day2Cutoff}`,
+      { method: "GET", headers }
+    );
+    if (!day2Res.ok) {
+      console.error("[runLifecycleSweep] Day-2 query failed:", day2Res.status, await day2Res.text());
+    } else {
+      const day2Rows = await day2Res.json();
+      for (const cons of Array.isArray(day2Rows) ? day2Rows : []) {
+        try {
+          const ref = formatConsultationRefServer(cons.id);
+          const threadId = cons.thread_id || "thread_" + cons.id;
+          const systemMsg = {
+            id: "msg_" + Math.random().toString(36).substr(2, 9),
+            sender: "system",
+            sender_name: "System",
+            text: `Day-2 check-in reminder for case ${ref}: your doctor should be following up with you soon. If you have new symptoms or questions, reply here anytime.`,
+            timestamp: new Date().toISOString()
+          };
+          const updatedMessages = [...(Array.isArray(cons.messages) ? cons.messages : []), systemMsg];
+
+          await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${cons.id}`, {
+            method: "PATCH",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              messages: updatedMessages,
+              day2_reminder_sent: true,
+              updated_at: new Date().toISOString()
+            })
+          });
+
+          await fetch(`${supabaseUrl}/rest/v1/messages`, {
+            method: "POST",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              id: systemMsg.id,
+              thread_id: threadId,
+              consultation_id: cons.id,
+              sender: "system",
+              sender_name: "System",
+              text: systemMsg.text,
+              timestamp: systemMsg.timestamp
+            })
+          });
+
+          console.log("[runLifecycleSweep] Day-2 reminder sent for", cons.id);
+        } catch (innerErr) {
+          console.error("[runLifecycleSweep] Day-2 reminder failed for", cons.id, innerErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[runLifecycleSweep] Day-2 step failed:", err);
+  }
+
+  // ---- 2. DAY-4 DOCTOR ALERT ----
+  try {
+    const day4Cutoff = new Date(Date.now() - 96 * 60 * 60 * 1000).toISOString();
+    const day4Res = await fetch(
+      `${supabaseUrl}/rest/v1/consultations?status=eq.active&stage=in.(day2_pending,day2_sent,day5_pending)&day4_alert_sent=eq.false&assigned_at=lt.${day4Cutoff}`,
+      { method: "GET", headers }
+    );
+    if (!day4Res.ok) {
+      console.error("[runLifecycleSweep] Day-4 query failed:", day4Res.status, await day4Res.text());
+    } else {
+      const day4Rows = await day4Res.json();
+      for (const cons of Array.isArray(day4Rows) ? day4Rows : []) {
+        try {
+          const ref = formatConsultationRefServer(cons.id);
+
+          await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+            method: "POST",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              id: "not_" + Math.random().toString(36).substr(2, 9),
+              recipient_id: cons.doctor_id,
+              recipient_role: "doctor",
+              type: "day4_alert",
+              title: "Day 5 Closure Due Tomorrow",
+              message: `Case ${ref} must be closed within 24 hours. Missing this deadline forfeits your earnings and reassigns the patient.`,
+              is_read: false,
+              created_at: new Date().toISOString()
+            })
+          });
+
+          await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${cons.id}`, {
+            method: "PATCH",
+            headers: writeHeaders,
+            body: JSON.stringify({ day4_alert_sent: true, updated_at: new Date().toISOString() })
+          });
+
+          console.log("[runLifecycleSweep] Day-4 alert sent for", cons.id, "to doctor", cons.doctor_id);
+        } catch (innerErr) {
+          console.error("[runLifecycleSweep] Day-4 alert failed for", cons.id, innerErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[runLifecycleSweep] Day-4 step failed:", err);
+  }
+
+  // ---- 3. DAY-5 FORFEIT ----
+  try {
+    const day5Cutoff = new Date(Date.now() - 120 * 60 * 60 * 1000).toISOString();
+    const day5Res = await fetch(
+      `${supabaseUrl}/rest/v1/consultations?status=eq.active&stage=in.(day2_pending,day2_sent,day5_pending)&assigned_at=lt.${day5Cutoff}`,
+      { method: "GET", headers }
+    );
+    if (!day5Res.ok) {
+      console.error("[runLifecycleSweep] Day-5 query failed:", day5Res.status, await day5Res.text());
+    } else {
+      const day5Rows = await day5Res.json();
+      for (const cons of Array.isArray(day5Rows) ? day5Rows : []) {
+        try {
+          const ref = formatConsultationRefServer(cons.id);
+          const threadId = cons.thread_id || "thread_" + cons.id;
+          const originalDoctorId = cons.doctor_id;
+
+          const systemMsg = {
+            id: "msg_" + Math.random().toString(36).substr(2, 9),
+            sender: "system",
+            sender_name: "System",
+            text: "This case has been reassigned due to a missed Day-5 deadline. A new doctor will pick up your case shortly.",
+            timestamp: new Date().toISOString()
+          };
+          const updatedMessages = [...(Array.isArray(cons.messages) ? cons.messages : []), systemMsg];
+
+          // Do NOT credit any wallet here - credited_doctor_id stays null until a new
+          // doctor actually closes the case.
+          await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${cons.id}`, {
+            method: "PATCH",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              original_doctor_id: originalDoctorId,
+              doctor_id: null,
+              forfeited: true,
+              status: "pending_doctor",
+              stage: "initial",
+              messages: updatedMessages,
+              updated_at: new Date().toISOString()
+            })
+          });
+
+          await fetch(`${supabaseUrl}/rest/v1/messages`, {
+            method: "POST",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              id: systemMsg.id,
+              thread_id: threadId,
+              consultation_id: cons.id,
+              sender: "system",
+              sender_name: "System",
+              text: systemMsg.text,
+              timestamp: systemMsg.timestamp
+            })
+          });
+
+          await fetch(`${supabaseUrl}/rest/v1/notifications`, {
+            method: "POST",
+            headers: writeHeaders,
+            body: JSON.stringify({
+              id: "not_" + Math.random().toString(36).substr(2, 9),
+              recipient_id: "admin",
+              recipient_role: "admin",
+              type: "forfeit_alert",
+              title: "Case Forfeited",
+              message: `Case ${ref} forfeited. Original doctor ID: ${originalDoctorId}. Patient returned to queue.`,
+              is_read: false,
+              created_at: new Date().toISOString()
+            })
+          });
+
+          console.log("[runLifecycleSweep] Day-5 forfeit applied for", cons.id, "original doctor", originalDoctorId);
+        } catch (innerErr) {
+          console.error("[runLifecycleSweep] Day-5 forfeit failed for", cons.id, innerErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[runLifecycleSweep] Day-5 step failed:", err);
+  }
+
+  console.log("[runLifecycleSweep] sweep completed at", new Date().toISOString());
+}
+
 app.listen(port, "0.0.0.0", () => {
   console.log(`PrivyDoc full-stack server running at http://0.0.0.0:${port}`);
   console.log("GEMINI KEY:", process.env.GEMINI_API_KEY ? "present" : "missing");
+
+  // Run the consultation lifecycle sweep once immediately, then every 30 minutes.
+  runLifecycleSweep().catch(e => console.error("[runLifecycleSweep] unhandled error:", e));
+  setInterval(() => {
+    runLifecycleSweep().catch(e => console.error("[runLifecycleSweep] unhandled error:", e));
+  }, 30 * 60 * 1000);
 });

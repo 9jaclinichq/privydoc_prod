@@ -76,6 +76,18 @@ export interface Consultation {
   patient_rating?: number; // 1 to 5 stars
   referral_text?: string; // clinical referral letter findings/urgency
   notes?: string;
+
+  // Sprint 3: consultation lifecycle sweep fields
+  assigned_at?: string; // set when a doctor claims the case
+  day2_reminder_sent?: boolean;
+  day4_alert_sent?: boolean;
+  forfeited?: boolean;
+  original_doctor_id?: string; // doctor who missed the Day-5 deadline
+  credited_doctor_id?: string; // doctor who actually closes the case, for payout credit
+  closed_at?: string;
+  docs_expire_at?: string;
+  slot_count?: number;
+  slot_reset_at?: string;
 }
 
 export interface PayoutRequest {

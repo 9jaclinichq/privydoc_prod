@@ -532,11 +532,12 @@ export const consultationApi = {
       consultations[index].status = "active";
       consultations[index].stage = "initial";
       consultations[index].locked_at = lockedAt;
+      consultations[index].assigned_at = lockedAt;
       consultations[index].thread_id = threadId;
       consultations[index].doctor_id = docId;
       consultations[index].doctor_name = docName;
       consultations[index].updated_at = new Date().toISOString();
-      
+
       const systemMsg: ChatMessage = {
         id: generateId("msg"),
         sender: "system",
@@ -553,6 +554,7 @@ export const consultationApi = {
         status: "active",
         stage: "initial",
         locked_at: lockedAt,
+        assigned_at: lockedAt,
         thread_id: threadId,
         doctor_id: docId,
         doctor_name: docName,

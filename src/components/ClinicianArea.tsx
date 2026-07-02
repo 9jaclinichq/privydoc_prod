@@ -840,7 +840,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                               <p className="flex justify-between"><span>Condition:</span> <strong className="text-[#E5C158] font-semibold">{selectedDoctorCase.condition}</strong></p>
                               <p className="flex justify-between"><span>Duration:</span> <strong className="text-zinc-200">{selectedDoctorCase.duration}</strong></p>
                               <p className="flex justify-between"><span>Clinical Stage:</span> <strong className="text-emerald-400 font-mono">{getStageTitle((selectedDoctorCase.stage || "initial") as any)}</strong></p>
-                              <p className="flex justify-between"><span>SLA SLA:</span> <strong className="text-zinc-400 font-mono">{getSLAHours((selectedDoctorCase.stage || "initial") as any)} Hours</strong></p>
+                              <p className="flex justify-between"><span>SLA:</span> <strong className="text-zinc-400 font-mono">{getSLAHours((selectedDoctorCase.stage || "initial") as any)} Hours</strong></p>
                             </div>
 
                             <div className="space-y-2">

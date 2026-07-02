@@ -44,6 +44,46 @@ function getFollowUpInfo(consultation: Consultation): { label: string; date: Dat
   };
 }
 
+// BMI and blood pressure, computed from the patient's actual submitted intake answers
+// (matched by question text, the same contract raw_answers already uses elsewhere)
+// rather than the fixed "120/80 (Normal)" / "24.7 (Healthy)" placeholder strings.
+function getHealthMetrics(consultation: Consultation): { bmi: string; bp: string } {
+  const findAnswer = (questionText: string): string | undefined =>
+    consultation.raw_answers?.find((a) => a.question === questionText)?.answer;
+
+  let bmi = "Not provided";
+  const heightCm = parseFloat(findAnswer("Height in cm") || "");
+  const weightKg = parseFloat(findAnswer("Weight in kg") || "");
+  if (heightCm > 0 && weightKg > 0) {
+    const heightM = heightCm / 100;
+    const value = weightKg / (heightM * heightM);
+    let category = "Healthy";
+    if (value < 18.5) category = "Underweight";
+    else if (value < 25) category = "Healthy";
+    else if (value < 30) category = "Overweight";
+    else category = "Obese";
+    bmi = `${value.toFixed(1)} (${category})`;
+  }
+
+  let bp = "Not reported";
+  const bpAnswer = findAnswer("What was your last blood pressure reading?");
+  if (bpAnswer) {
+    const match = bpAnswer.match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
+    if (match) {
+      const systolic = parseInt(match[1], 10);
+      const diastolic = parseInt(match[2], 10);
+      let category = "Normal";
+      if (systolic >= 140 || diastolic >= 90) category = "High";
+      else if (systolic >= 130 || diastolic >= 80) category = "Elevated";
+      bp = `${systolic}/${diastolic} (${category})`;
+    } else {
+      bp = bpAnswer;
+    }
+  }
+
+  return { bmi, bp };
+}
+
 interface PatientPortalProps {
   selectedCase: Consultation | null;
   setSelectedCase: (c: Consultation | null) => void;
@@ -439,15 +479,15 @@ export default function PatientPortal({
                       </div>
                     </div>
 
-                    {/* Interactive Health Summary (Mockup Grid) */}
+                    {/* Interactive Health Summary */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
                         <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Blood Pressure</p>
-                        <p className="text-sm font-bold text-emerald-400">120/80 (Normal)</p>
+                        <p className="text-sm font-bold text-emerald-400">{getHealthMetrics(selectedCase).bp}</p>
                       </div>
                       <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
                         <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">BMI Index</p>
-                        <p className="text-sm font-bold text-[#E5C158]">24.7 (Healthy)</p>
+                        <p className="text-sm font-bold text-[#E5C158]">{getHealthMetrics(selectedCase).bmi}</p>
                       </div>
                       <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-1">
                         <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-500">Cardio risk</p>

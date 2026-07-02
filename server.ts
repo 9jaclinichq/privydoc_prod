@@ -2251,7 +2251,7 @@ Analyze the above intake and return the clinical brief and safety check boolean.
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2303,7 +2303,7 @@ Analyze the above intake and return the clinical brief and safety check boolean.
       red_flag: !!parsed.red_flag
     };
   } catch (err) {
-    console.warn("Clinical summary Gemini call failed, using local fallback:", err);
+    console.error("[generateClinicalSummary] Gemini call failed, using local fallback. Full error:", err);
     return { summary: fallbackSummary, red_flag: false };
   }
 }
@@ -2374,7 +2374,7 @@ Do not provide a diagnosis or prescribe medication. Keep tone calm and professio
       const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2879,4 +2879,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`PrivyDoc full-stack server running at http://0.0.0.0:${port}`);
+  console.log("GEMINI KEY:", process.env.GEMINI_API_KEY ? "present" : "missing");
 });

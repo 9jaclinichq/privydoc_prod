@@ -743,6 +743,8 @@ export const consultationApi = {
       consultations[index].status = "completed";
       consultations[index].stage = "day5_closed";
       consultations[index].day5_closed_at = closedAt;
+      consultations[index].closed_at = closedAt;
+      consultations[index].docs_expire_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       consultations[index].doctor_notes = notes;
       consultations[index].prescription = prescription;
       consultations[index].updated_at = new Date().toISOString();
@@ -799,6 +801,8 @@ export const consultationApi = {
         status: "completed",
         stage: "day5_closed",
         day5_closed_at: closedAt,
+        closed_at: consultations[index].closed_at,
+        docs_expire_at: consultations[index].docs_expire_at,
         doctor_notes: notes,
         prescription,
         messages: consultations[index].messages,

@@ -6,6 +6,7 @@ import helmet from "helmet";
 import { fileURLToPath } from "url";
 import { createHash, randomBytes } from "crypto";
 import { Resend } from "resend";
+import Anthropic from "@anthropic-ai/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2191,8 +2192,73 @@ function checkDoctorLimit(doctorId: string): boolean {
   return true;
 }
 
-// Shared clinical summary generator — calls Gemini directly (replaces the old Supabase
-// "ai-summary" Edge Function call). Used by both /api/ai/generate-summary and /api/payment/verify.
+// Call Claude (primary AI engine). Throws on missing key, timeout, or API error so
+// callers can fall through to Gemini, then the local fallback template.
+async function callClaude(systemPrompt: string, userPrompt: string, maxTokens = 1024): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
+  }
+  const anthropic = new Anthropic({ apiKey });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  try {
+    const message = await anthropic.messages.create(
+      {
+        model: "claude-haiku-4-5",
+        max_tokens: maxTokens,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: [{ role: "user", content: userPrompt }]
+      },
+      { signal: controller.signal }
+    );
+    const textBlock = message.content.find((block) => block.type === "text");
+    if (!textBlock || textBlock.type !== "text" || !textBlock.text) {
+      throw new Error("Claude response did not contain text content.");
+    }
+    return textBlock.text;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Call Gemini (fallback AI engine, used when Claude fails or ANTHROPIC_API_KEY is missing).
+async function callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey) {
+    throw new Error("GEMINI_API_KEY not configured");
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  try {
+    const combinedPrompt = systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt;
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: combinedPrompt }] }]
+        }),
+        signal: controller.signal
+      }
+    );
+    if (!geminiRes.ok) {
+      throw new Error(`Gemini API responded with status ${geminiRes.status}: ${await geminiRes.text()}`);
+    }
+    const geminiData = await geminiRes.json();
+    const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!rawText) {
+      throw new Error("Gemini response did not contain text content.");
+    }
+    return rawText;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// Shared clinical summary generator — tries Claude first, falls back to Gemini, then to a
+// local fallback template. Used by both /api/ai/generate-summary and /api/payment/verify.
 async function generateClinicalSummary(params: {
   patient_age?: number | string;
   condition_title?: string;
@@ -2204,23 +2270,17 @@ async function generateClinicalSummary(params: {
 
   const fallbackSummary = `CLINICAL BRIEF (LOCAL FALLBACK): Patient is a ${patient_age || "unspecified-age"} reporting ${condition_title || track || "condition"} for ${duration || "unspecified period"}. Verify raw answers for contraindications before prescribing.`;
 
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  if (!geminiApiKey) {
-    console.warn("GEMINI_API_KEY not configured; returning local fallback clinical summary.");
-    return { summary: fallbackSummary, red_flag: false };
-  }
-
   const intakeFormatted = Array.isArray(raw_answers)
     ? raw_answers.map((ans) => `- ${ans.question || "Question"}: ${ans.answer || "Not specified"}`).join("\n")
     : "None provided";
 
   const systemPrompt = `You are an expert clinical decision support assistant for PrivyDoc, a confidential men's telemedicine platform in Nigeria.
 
-Analyze the patient's complete intake responses and generate a structured clinical summary for the reviewing physician in this exact JSON format:
+Analyze the patient's complete intake responses (spanning both Phase 1 and Phase 2 of the intake questionnaire) and generate a structured clinical summary for the reviewing physician in this exact JSON format:
 
 {
   "summary": "2-3 sentence clinical overview mentioning age, condition, duration, key risk factors",
-  "presenting_complaint": "One sentence description of the main presenting complaint",
+  "presenting_complaint": "One sentence description of the main presenting complaint (chief complaint)",
   "key_findings": ["finding 1", "finding 2", "finding 3"],
   "risk_factors": ["risk 1", "risk 2"],
   "shim_score": null or { "score": number, "severity": "Mild|Moderate|Severe|No ED" },
@@ -2241,44 +2301,24 @@ Rules:
   const userPrompt = `Patient Age: ${patient_age || "unspecified"}
 Condition: ${condition_title || track || "unspecified"}
 Duration: ${duration || "unspecified"}
-Intake Answers:
+Phase 1 & Phase 2 Intake Answers:
 ${intakeFormatted}
 
 Analyze the above intake and return the clinical brief and safety check boolean.`;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }]
-        }),
-        signal: controller.signal
-      }
-    );
-    clearTimeout(timeoutId);
-
-    if (!geminiRes.ok) {
-      throw new Error(`Gemini API responded with status ${geminiRes.status}: ${await geminiRes.text()}`);
-    }
-
-    const geminiData = await geminiRes.json();
-    const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  // Turns a model's raw JSON-containing text response into the formatted brief text
+  // and red_flag boolean, labeled with which engine produced it.
+  const parseAndLabel = (rawText: string, label: string): { summary: string; red_flag: boolean } => {
     const jsonStart = rawText.indexOf("{");
     const jsonEnd = rawText.lastIndexOf("}");
     if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("Gemini response did not contain valid JSON.");
+      throw new Error(`${label} response did not contain valid JSON.`);
     }
     const parsed = JSON.parse(rawText.substring(jsonStart, jsonEnd + 1));
 
-    const parts: string[] = [];
+    const parts: string[] = [label];
     if (parsed.summary) parts.push(`SUMMARY:\n${parsed.summary}`);
-    if (parsed.presenting_complaint) parts.push(`PRESENTING COMPLAINT:\n${parsed.presenting_complaint}`);
+    if (parsed.presenting_complaint) parts.push(`CHIEF COMPLAINT:\n${parsed.presenting_complaint}`);
     if (Array.isArray(parsed.key_findings) && parsed.key_findings.length > 0) {
       parts.push(`KEY FINDINGS:\n${parsed.key_findings.map((f: string) => `- ${f}`).join("\n")}`);
     }
@@ -2291,21 +2331,37 @@ Analyze the above intake and return the clinical brief and safety check boolean.
         : String(parsed.shim_score);
       parts.push(`SHIM SCORE:\n${shim}`);
     }
+    parts.push(`RED FLAG STATUS:\n${parsed.red_flag ? `YES — ${Array.isArray(parsed.red_flag_reasons) && parsed.red_flag_reasons.length > 0 ? parsed.red_flag_reasons.join(", ") : "see findings above"}` : "No red flags identified"}`);
     if (parsed.suggested_approach) parts.push(`SUGGESTED CLINICAL APPROACH:\n${parsed.suggested_approach}`);
     if (Array.isArray(parsed.differential_considerations) && parsed.differential_considerations.length > 0) {
       parts.push(`DIFFERENTIAL CONSIDERATIONS:\n${parsed.differential_considerations.map((d: string) => `- ${d}`).join("\n")}`);
     }
     if (parsed.contraindication_alert) parts.push(`⚠ CONTRAINDICATION ALERT:\n${parsed.contraindication_alert}`);
 
-    const formattedSummary = parts.join("\n\n");
     return {
-      summary: formattedSummary || parsed.summary || "Clinical details submitted. Please review answers manually.",
+      summary: parts.join("\n\n"),
       red_flag: !!parsed.red_flag
     };
-  } catch (err) {
-    console.error("[generateClinicalSummary] Gemini call failed, using local fallback. Full error:", err);
-    return { summary: fallbackSummary, red_flag: false };
+  };
+
+  // 1. Claude (primary)
+  try {
+    const rawText = await callClaude(systemPrompt, userPrompt);
+    return parseAndLabel(rawText, "CLAUDE CLINICAL BRIEF");
+  } catch (claudeErr) {
+    console.error("[generateClinicalSummary] Claude call failed, falling back to Gemini. Full error:", claudeErr);
   }
+
+  // 2. Gemini (fallback)
+  try {
+    const rawText = await callGemini(systemPrompt, userPrompt);
+    return parseAndLabel(rawText, "GEMINI CLINICAL BRIEF");
+  } catch (geminiErr) {
+    console.error("[generateClinicalSummary] Gemini call failed, using local fallback. Full error:", geminiErr);
+  }
+
+  // 3. Local fallback (both engines unavailable/failed)
+  return { summary: fallbackSummary, red_flag: false };
 }
 
 // API endpoint for AI Summary generation (Express + Gemini — replaces the Supabase Edge Function)
@@ -2335,7 +2391,7 @@ app.post(
   }
 );
 
-// API endpoint for anonymous Quick Check AI analysis (direct Gemini call, no login required)
+// API endpoint for anonymous Quick Check AI analysis (Claude primary, Gemini fallback, no login required)
 app.post(
   "/api/gemini/quick-check",
   rateLimiter("geminiQuickCheck", 20, 3 * 60 * 1000, "Too many quick-check requests. Please wait."),
@@ -2353,60 +2409,49 @@ app.post(
         "A formal review allows for a tailored treatment plan."
       ],
       recommendation: "We recommend a full doctor review to get a personalised assessment and, if appropriate, a prescription.",
-      urgency: "routine" as const
+      urgency: "routine" as const,
+      source: "fallback" as const
     };
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      console.warn("GEMINI_API_KEY not configured; returning fallback quick-check insight.");
-      return res.json({ ok: true, ...fallback });
-    }
-
-    try {
-      const prompt = `You are a clinical decision support assistant for PrivyDoc, a men's telemedicine platform in Nigeria. A patient completed an anonymous quick symptom check for the condition "${track}". Their answers (question:answer pairs) are: ${JSON.stringify(answers)}.
+    const prompt = `You are a clinical decision support assistant for PrivyDoc, a men's telemedicine platform in Nigeria. A patient completed an anonymous quick symptom check for the condition "${track}". Their answers (question:answer pairs) are: ${JSON.stringify(answers)}.
 
 Analyse the answers and respond with STRICT JSON only, no markdown, no extra text, matching exactly this shape:
 {"headline": "one sentence summary", "insights": ["insight 1", "insight 2", "insight 3"], "recommendation": "clinical recommendation text", "urgency": "routine" | "soon" | "urgent"}
 
 Do not provide a diagnosis or prescribe medication. Keep tone calm and professional. If any answer suggests a medical emergency, set urgency to "urgent".`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          }),
-          signal: controller.signal
-        }
-      );
-      clearTimeout(timeoutId);
-
-      if (!geminiRes.ok) {
-        throw new Error(`Gemini API responded with status ${geminiRes.status}: ${await geminiRes.text()}`);
-      }
-
-      const geminiData = await geminiRes.json();
-      const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parseQuickCheck = (rawText: string): { headline: string; insights: string[]; recommendation: string; urgency: "routine" | "soon" | "urgent" } => {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error("Gemini response did not contain valid JSON.");
+        throw new Error("Response did not contain valid JSON.");
       }
-
       const parsed = JSON.parse(jsonMatch[0]);
       if (!parsed.headline || !Array.isArray(parsed.insights) || !parsed.recommendation || !parsed.urgency) {
-        throw new Error("Gemini response JSON missing required fields.");
+        throw new Error("Response JSON missing required fields.");
       }
+      return parsed;
+    };
 
-      res.json({ ok: true, ...parsed });
-    } catch (error: any) {
-      console.error("Quick-check Gemini call failed, returning fallback:", error);
-      res.json({ ok: true, ...fallback });
+    // 1. Claude (primary)
+    try {
+      const rawText = await callClaude("", prompt);
+      const parsed = parseQuickCheck(rawText);
+      return res.json({ ok: true, ...parsed, source: "claude" });
+    } catch (claudeErr) {
+      console.error("[quick-check] Claude call failed, falling back to Gemini. Full error:", claudeErr);
     }
+
+    // 2. Gemini (fallback)
+    try {
+      const rawText = await callGemini("", prompt);
+      const parsed = parseQuickCheck(rawText);
+      return res.json({ ok: true, ...parsed, source: "gemini" });
+    } catch (geminiErr) {
+      console.error("[quick-check] Gemini call failed, returning fallback. Full error:", geminiErr);
+    }
+
+    // 3. Local fallback (both engines unavailable/failed)
+    res.json({ ok: true, ...fallback });
   }
 );
 

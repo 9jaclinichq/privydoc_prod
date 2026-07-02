@@ -1,20 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Lock, ArrowRight, ArrowLeft, User, ShieldAlert, FileText, FileDown,
   MessageSquare, Sparkles, Send, HelpCircle, Activity,
-  LineChart, Compass, Wallet, Settings, Clock, Heart, ClipboardCheck
+  LineChart, Compass, Wallet, Settings, Clock, Heart, ClipboardCheck,
+  CheckCircle2, AlertCircle
 } from "lucide-react";
 import { Consultation } from "../types";
 import { renderRichText } from "../utils";
 import { toast } from "./ToastNotification";
 import { MEN_HEALTH_CONDITIONS, NIGERIAN_STATES } from "../data";
 import { getSLAHours, ConsultationStage } from "../lifecycle";
+import { patientApi } from "../lib/api";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
 
 // Friendly reference number for patient-facing display, instead of the raw internal consultation ID.
 function getPatientReference(consultationId: string): string {
   return `PD-${consultationId.slice(-6).toUpperCase()}`;
+}
+
+// Verification badge shown next to phone/email fields on the profile tab.
+function VerificationBadge({ verified }: { verified: boolean }) {
+  return verified ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+      <CheckCircle2 className="w-3 h-3" /> Verified
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+      <AlertCircle className="w-3 h-3" /> Unverified
+    </span>
+  );
 }
 
 // Next doctor check-in, derived from the consultation's real clinical stage SLA (see lifecycle.ts)
@@ -86,6 +101,59 @@ export default function PatientPortal({
   const [editEmail, setEditEmail] = useState<string>(patientEmail);
   const [editState, setEditState] = useState<string>(patientState);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
+
+  // Email verification state. There is no email_verified column on the patients
+  // table (confirmed - not in migrations, not in the Patient type, not read/written
+  // by mapPatientFromSupabase/mapPatientToSupabase or /api/patient/profile), so this
+  // is tracked locally per-phone-number rather than risking a write to a column that
+  // may not exist on the live table. Phone is always verified: OTP verification is a
+  // mandatory, unbypassable step of patient registration (see App.tsx handlePatientOtpSubmit).
+  const [emailVerified, setEmailVerified] = useState<boolean>(false);
+  const [showEmailOtpInput, setShowEmailOtpInput] = useState<boolean>(false);
+  const [emailOtpCode, setEmailOtpCode] = useState<string>("");
+  const [sendingEmailOtp, setSendingEmailOtp] = useState<boolean>(false);
+  const [verifyingEmailOtp, setVerifyingEmailOtp] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (patientPhone) {
+      setEmailVerified(localStorage.getItem(`privydoc_email_verified_${patientPhone}`) === "true");
+    }
+  }, [patientPhone]);
+
+  const handleSendEmailVerification = async () => {
+    if (!patientEmail || !patientPhone) return;
+    setSendingEmailOtp(true);
+    try {
+      const res = await patientApi.sendOtp(patientPhone, "email", patientEmail);
+      if (res.success) {
+        setShowEmailOtpInput(true);
+        toast.success("A verification code has been sent to your email.");
+      } else {
+        toast.error(res.error || "Failed to send verification code.");
+      }
+    } finally {
+      setSendingEmailOtp(false);
+    }
+  };
+
+  const handleConfirmEmailVerification = async () => {
+    if (!patientPhone || !emailOtpCode.trim()) return;
+    setVerifyingEmailOtp(true);
+    try {
+      const res = await patientApi.verifyOtp(patientPhone, emailOtpCode.trim());
+      if (res.success) {
+        localStorage.setItem(`privydoc_email_verified_${patientPhone}`, "true");
+        setEmailVerified(true);
+        setShowEmailOtpInput(false);
+        setEmailOtpCode("");
+        toast.success("Email verified successfully.");
+      } else {
+        toast.error(res.error || "Incorrect or expired verification code.");
+      }
+    } finally {
+      setVerifyingEmailOtp(false);
+    }
+  };
 
   // Dispute states
   const [disputeSubmitted, setDisputeSubmitted] = useState<boolean>(false);
@@ -404,7 +472,10 @@ export default function PatientPortal({
                   </h4>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono text-zinc-500 block">Phone Number (not editable)</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] uppercase font-mono text-zinc-500 block">Phone Number (not editable)</label>
+                      <VerificationBadge verified={true} />
+                    </div>
                     <input
                       type="tel"
                       value={patientPhone}
@@ -424,13 +495,48 @@ export default function PatientPortal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-mono text-zinc-400 block">Email</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] uppercase font-mono text-zinc-400 block">Email</label>
+                      <div className="flex items-center gap-2">
+                        <VerificationBadge verified={emailVerified} />
+                        {!emailVerified && patientEmail && !showEmailOtpInput && (
+                          <button
+                            type="button"
+                            onClick={handleSendEmailVerification}
+                            disabled={sendingEmailOtp}
+                            className="text-[10px] font-bold text-[#E5C158] hover:text-[#d4af37] underline disabled:opacity-50"
+                          >
+                            {sendingEmailOtp ? "Sending..." : "Verify now"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <input
                       type="email"
                       value={editEmail}
                       onChange={(e) => setEditEmail(e.target.value)}
                       className="w-full bg-black border border-zinc-900 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
                     />
+                    {showEmailOtpInput && (
+                      <div className="flex items-center gap-2 pt-1.5 animate-fade-in">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Enter code"
+                          value={emailOtpCode}
+                          onChange={(e) => setEmailOtpCode(e.target.value)}
+                          className="flex-1 bg-black border border-zinc-900 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]/30 focus:outline-none transition-all duration-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConfirmEmailVerification}
+                          disabled={verifyingEmailOtp || !emailOtpCode.trim()}
+                          className="px-3.5 py-2 bg-[#d4af37] hover:bg-[#b8860b] disabled:opacity-50 text-black font-bold text-xs rounded-xl transition-colors whitespace-nowrap"
+                        >
+                          {verifyingEmailOtp ? "Confirming..." : "Confirm"}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

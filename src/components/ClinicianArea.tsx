@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Doctor, Consultation } from "../types";
 import { consultationApi, doctorApi } from "../lib/api";
-import { renderRichText, formatChatTimestamp } from "../utils";
+import { renderRichText, formatChatTimestamp, formatConsultationRef } from "../utils";
 import { getStageTitle, getSLAHours, ConsultationStage } from "../lifecycle";
 import { getTemplates, saveCustomTemplate, deleteCustomTemplate, validateTemplatePlaceholders, ResponseTemplate } from "../templates";
 import { generateConsultationPDF } from "../utils/pdfGenerator";
@@ -833,7 +833,7 @@ MDCN Registration Folio: ${currentDoctor?.mdcn_folio || "MDCN-REGISTERED"}`;
                         {responseCentreTab === "intake" && (
                           <div className="space-y-4 animate-fade-in text-xs">
                             <div className="bg-black/50 rounded-xl p-3 border border-zinc-900 space-y-2 text-zinc-400">
-                              <p className="flex justify-between"><span>Case Ref:</span> <strong className="text-white font-mono">{selectedDoctorCase.id}</strong></p>
+                              <p className="flex justify-between"><span>Case Ref:</span> <strong className="text-white font-mono">{formatConsultationRef(selectedDoctorCase.id)}</strong></p>
                               <p className="flex justify-between"><span>Registered:</span> <strong className="text-white">{formatDate(selectedDoctorCase.created_at)}</strong></p>
                               <p className="flex justify-between"><span>Patient Name:</span> <strong className="text-white">{selectedDoctorCase.patient_name}</strong></p>
                               <p className="flex justify-between"><span>Age Reference:</span> <strong className="text-white">{selectedDoctorCase.patient_age} years</strong></p>

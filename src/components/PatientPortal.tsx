@@ -6,18 +6,13 @@ import {
   CheckCircle2, AlertCircle
 } from "lucide-react";
 import { Consultation } from "../types";
-import { renderRichText, formatChatTimestamp } from "../utils";
+import { renderRichText, formatChatTimestamp, formatConsultationRef } from "../utils";
 import { toast } from "./ToastNotification";
 import { MEN_HEALTH_CONDITIONS, NIGERIAN_STATES } from "../data";
 import { getSLAHours, ConsultationStage } from "../lifecycle";
 import { patientApi } from "../lib/api";
 
 import { generateConsultationPDF } from "../utils/pdfGenerator";
-
-// Friendly reference number for patient-facing display, instead of the raw internal consultation ID.
-function getPatientReference(consultationId: string): string {
-  return `PD-${consultationId.slice(-6).toUpperCase()}`;
-}
 
 // Verification badge shown next to phone/email fields on the profile tab.
 function VerificationBadge({ verified }: { verified: boolean }) {
@@ -426,7 +421,7 @@ export default function PatientPortal({
                           Welcome back, {selectedCase.patient_name}.
                         </h3>
                         <p className="text-xs text-zinc-400 leading-relaxed">
-                          Your confidential clinical logs and medical file <strong className="text-white font-mono">{getPatientReference(selectedCase.id)}</strong> are secure inside your digital vault.
+                          Your confidential clinical logs and medical file <strong className="text-white font-mono">{formatConsultationRef(selectedCase.id)}</strong> are secure inside your digital vault.
                         </p>
                       </div>
                     </div>
@@ -447,7 +442,7 @@ export default function PatientPortal({
                             {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
                           </span>
                           <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
-                          <p className="text-xs text-zinc-400 mt-1">Reference: {getPatientReference(selectedCase.id)} • Registered {formatDate(selectedCase.created_at)}</p>
+                          <p className="text-xs text-zinc-400 mt-1">Reference: {formatConsultationRef(selectedCase.id)} • Registered {formatDate(selectedCase.created_at)}</p>
                         </div>
 
                         <button
@@ -665,7 +660,7 @@ export default function PatientPortal({
                         >
                           <div>
                             <h5 className="font-bold text-zinc-200">{c.condition}</h5>
-                            <p className="text-[10px] text-zinc-500 mt-0.5">Ref: {getPatientReference(c.id)} • Filed: {formatDate(c.created_at)}</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">Ref: {formatConsultationRef(c.id)} • Filed: {formatDate(c.created_at)}</p>
                           </div>
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono tracking-widest font-extrabold uppercase ${
                             c.status === "completed" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
@@ -715,7 +710,7 @@ export default function PatientPortal({
                             {selectedCase.red_flag ? "Safety Flagged" : selectedCase.status === "completed" ? "Completed / Prescribed" : selectedCase.status === "active" ? "Active Clinician Review" : "Pending Pickup"}
                           </span>
                           <h4 className="text-base font-bold text-white mt-2 font-mono">{selectedCase.condition}</h4>
-                          <p className="text-xs text-zinc-400 mt-1">Reference: {getPatientReference(selectedCase.id)} • Registered {formatDate(selectedCase.created_at)}</p>
+                          <p className="text-xs text-zinc-400 mt-1">Reference: {formatConsultationRef(selectedCase.id)} • Registered {formatDate(selectedCase.created_at)}</p>
                         </div>
                       </div>
 

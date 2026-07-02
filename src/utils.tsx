@@ -5,6 +5,13 @@ export function generateId(prefix: string = "id"): string {
   return `${prefix}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
+// Friendly PD-XXXXXX reference for patient-facing/clinician-facing display, instead of
+// the raw internal consultation ID (e.g. "cons_07dmkwt8e"). Shared by PatientPortal and
+// ClinicianArea so the same consultation shows the identical reference on both sides.
+export function formatConsultationRef(consultationId: string): string {
+  return `PD-${consultationId.slice(-6).toUpperCase()}`;
+}
+
 // Format currency in Nigerian Naira (NGN)
 export function formatNaira(amount: number): string {
   return new Intl.NumberFormat("en-NG", {

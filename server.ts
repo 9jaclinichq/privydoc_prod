@@ -502,6 +502,30 @@ app.post("/api/data/:table", enforceAuthorization, (req, res, next) => {
       }
     }
 
+    if (table === "disputes") {
+      const { consultation_id } = req.body;
+      if (consultation_id) {
+        // Look up the consultation row and re-use its actual id value for the dispute
+        // insert, rather than trusting the client-supplied string directly. This is
+        // correct regardless of whether consultations.id / disputes.consultation_id
+        // are TEXT or UUID on the live table, since it's the same value Supabase
+        // itself returns for that row.
+        const consLookup = await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${encodeURIComponent(consultation_id)}&select=id&limit=1`, {
+          method: "GET",
+          headers: {
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json"
+          }
+        });
+        const consRows = consLookup.ok ? await consLookup.json() : null;
+        if (!Array.isArray(consRows) || consRows.length === 0) {
+          return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Consultation not found" });
+        }
+        req.body.consultation_id = consRows[0].id;
+      }
+    }
+
     const url = `${supabaseUrl}/rest/v1/${table}`;
     const response = await fetch(url, {
       method: "POST",

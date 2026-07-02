@@ -167,6 +167,11 @@ CREATE TABLE IF NOT EXISTS disputes (
   created_at timestamptz DEFAULT now()
 );
 
+-- If disputes already existed on the live database before this migration (e.g. created
+-- with a UUID consultation_id column via the Supabase table editor), correct it to match
+-- consultations.id, which is TEXT (e.g. "cons_07dmkwt8e"), not UUID. No-op if already text.
+ALTER TABLE IF EXISTS disputes ALTER COLUMN consultation_id TYPE text USING consultation_id::text;
+
 CREATE TABLE IF NOT EXISTS app_config (
   id text PRIMARY KEY,
   key text UNIQUE NOT NULL,

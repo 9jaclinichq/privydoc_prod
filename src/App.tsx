@@ -1488,6 +1488,34 @@ export default function App() {
     }
   };
 
+  // Reopen a closed consultation for a review pickup (resets it to "Pending Pickup")
+  const handleOpenReviewConsultation = async () => {
+    if (!selectedCase || !patientSession) return;
+    try {
+      const res = await fetch(`/api/consultations/${selectedCase.id}/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-patient-phone": patientSession.phone
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      console.log("[handleOpenReviewConsultation] result", data);
+
+      if (!res.ok || !data.ok) {
+        toast.error(data.message || "Could not open review consultation. Please try again.");
+        return;
+      }
+
+      if (data.consultation) setSelectedCase(data.consultation);
+      toast.success("Review consultation opened. A doctor will pick up your file shortly.");
+      triggerRefresh();
+    } catch (e) {
+      console.error("[handleOpenReviewConsultation] failed:", e);
+      toast.error("Could not open review consultation. Please try again.");
+    }
+  };
+
   // Clinician Registration
   const handleDoctorRegister = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2633,6 +2661,7 @@ export default function App() {
                 patientMessage={patientMessage}
                 setPatientMessage={setPatientMessage}
                 onSendPatientMessage={handleSendPatientMsg}
+                onOpenReviewConsultation={handleOpenReviewConsultation}
                 onStartNewCase={() => setPatientSubView("landing")}
                 onSelectNewCondition={handleStartIntake}
                 onSelectSymptom={handleSymptomSelect}

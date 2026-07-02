@@ -89,6 +89,7 @@ interface PatientPortalProps {
   patientMessage: string;
   setPatientMessage: (msg: string) => void;
   onSendPatientMessage: () => void;
+  onOpenReviewConsultation?: () => void;
   onStartNewCase: () => void;
   onSelectNewCondition: (condition: typeof MEN_HEALTH_CONDITIONS[0]) => void;
   onSelectSymptom: (conditionId: string) => void;
@@ -115,6 +116,7 @@ export default function PatientPortal({
   patientMessage,
   setPatientMessage,
   onSendPatientMessage,
+  onOpenReviewConsultation,
   onStartNewCase,
   onSelectNewCondition,
   onSelectSymptom,
@@ -851,12 +853,28 @@ export default function PatientPortal({
                           );
                         })
                       )}
+                      {selectedCase.stage === "day5_closed" && selectedCase.docs_expire_at && (
+                        <p className="text-center text-xs text-gray-400 italic pt-1">
+                          Documents accessible for 30 days from closure.
+                          {" "}Expires: {new Date(selectedCase.docs_expire_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                      )}
                     </div>
 
                     {/* Messages Input Box */}
                     {selectedCase.status === "completed" ? (
-                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center text-[10px] text-zinc-500 font-bold italic shrink-0">
-                        Consultation file closed. Digital prescription has been issued in the reports tab.
+                      <div className="p-3.5 bg-black/40 border-t border-zinc-900 text-center shrink-0 space-y-2.5">
+                        <p className="text-[10px] text-zinc-500 font-bold italic">
+                          Consultation file closed. Digital prescription has been issued in the reports tab.
+                        </p>
+                        {onOpenReviewConsultation && (
+                          <button
+                            onClick={onOpenReviewConsultation}
+                            className="w-full py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold rounded-xl text-xs transition-all"
+                          >
+                            Open Review Consultation
+                          </button>
+                        )}
                       </div>
                     ) : (selectedCase.slot_count || 0) >= 3 ? (
                       <div className="p-3.5 bg-zinc-900/40 border-t border-zinc-900 text-center text-xs text-gray-400 shrink-0">
@@ -896,8 +914,35 @@ export default function PatientPortal({
                       Reports and digital prescriptions are issued after your clinical assessment. Select a program to begin.
                     </p>
                   </div>
+                ) : selectedCase.docs_expire_at && Math.ceil((new Date(selectedCase.docs_expire_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) <= 0 ? (
+                  <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-8 text-center space-y-4 animate-fade-in">
+                    <Lock className="w-12 h-12 text-zinc-600 mx-auto" />
+                    <h4 className="text-sm font-bold text-zinc-300" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Clinical documents have expired.</h4>
+                    <p className="text-xs text-zinc-400 max-w-sm mx-auto leading-relaxed">
+                      Open a Review Consultation to restore access for another 30 days.
+                    </p>
+                    {onOpenReviewConsultation && (
+                      <button
+                        onClick={onOpenReviewConsultation}
+                        className="px-5 py-2.5 bg-[#d4af37] hover:bg-[#b8860b] text-black font-extrabold text-xs rounded-xl transition-colors"
+                      >
+                        Open Review Consultation
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <>
+                    {selectedCase.docs_expire_at && (() => {
+                      const daysLeft = Math.ceil((new Date(selectedCase.docs_expire_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return daysLeft > 0 && daysLeft <= 5 ? (
+                        <div className="bg-[#C9A84C]/10 border border-[#C9A84C]/30 rounded-2xl p-4 text-center">
+                          <p className="text-xs font-semibold" style={{ color: "#C9A84C" }}>
+                            Your clinical documents expire in {daysLeft} day{daysLeft === 1 ? "" : "s"}. Download all documents now to keep a permanent copy.
+                          </p>
+                        </div>
+                      ) : null;
+                    })()}
+
                     {/* Submitted Intake Answers Card */}
                     <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
                       <h4 className="text-xs font-extrabold text-zinc-500 uppercase tracking-widest font-mono border-b border-zinc-900 pb-2">

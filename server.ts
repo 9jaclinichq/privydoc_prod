@@ -1526,6 +1526,84 @@ app.post("/api/consultations/:id/patient-message", async (req, res) => {
   }
 });
 
+// Reopens a closed consultation for a review pickup: resets status to "pending" (shown
+// as "Pending Pickup" on the patient dashboard) so a doctor can claim it again. This is
+// a conservative implementation: it does NOT create a new consultation record and does
+// NOT charge a new payment, since neither was specified despite being asked about
+// repeatedly - it only reopens the existing case. If a new payment / new consultation
+// record was actually intended, this needs to be extended once that's confirmed.
+app.post("/api/consultations/:id/review", async (req, res) => {
+  const { id } = req.params;
+  const patientPhone = req.headers["x-patient-phone"] as string | undefined;
+
+  if (!patientPhone) {
+    return res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "Patient session required." });
+  }
+
+  try {
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+    const headers = {
+      apikey: supabaseServiceKey,
+      Authorization: `Bearer ${supabaseServiceKey}`,
+      "Content-Type": "application/json"
+    };
+    const sanitizedPhone = normPhone(patientPhone);
+
+    const consRes = await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${encodeURIComponent(id)}&limit=1`, {
+      method: "GET",
+      headers
+    });
+    if (!consRes.ok) {
+      throw new Error(`Failed to fetch consultation: ${consRes.status}`);
+    }
+    const consRows = await consRes.json();
+    if (!Array.isArray(consRows) || consRows.length === 0) {
+      return res.status(404).json({ ok: false, code: "NOT_FOUND", message: "Consultation not found." });
+    }
+    const cons = consRows[0];
+
+    if (cons.patient_phone !== sanitizedPhone) {
+      return res.status(403).json({ ok: false, code: "FORBIDDEN", message: "IDOR Blocked: consultation does not belong to this patient." });
+    }
+    if (cons.status !== "completed" && cons.stage !== "day5_closed") {
+      return res.status(400).json({ ok: false, code: "BAD_REQUEST", message: "Only a closed consultation can be reopened for review." });
+    }
+
+    const systemMsg = {
+      id: "msg_" + Math.random().toString(36).substr(2, 9),
+      sender: "system" as const,
+      sender_name: "System",
+      text: "Patient has reopened this case for a review consultation. A doctor will pick up your file shortly.",
+      timestamp: new Date().toISOString()
+    };
+    const updatedMessages = [...(Array.isArray(cons.messages) ? cons.messages : []), systemMsg];
+
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/consultations?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { ...headers, Prefer: "return=representation" },
+      body: JSON.stringify({
+        status: "pending",
+        stage: "initial",
+        doctor_id: null,
+        doctor_name: null,
+        is_review: true,
+        messages: updatedMessages,
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (!patchRes.ok) {
+      throw new Error(`Failed to update consultation: ${patchRes.status} ${await patchRes.text()}`);
+    }
+    const patched = await patchRes.json();
+    const updatedConsultation = Array.isArray(patched) ? patched[0] : patched;
+
+    res.json({ ok: true, consultation: updatedConsultation });
+  } catch (error) {
+    console.error("[review] error:", error);
+    res.status(500).json({ ok: false, code: "INTERNAL_ERROR", message: "Could not open review consultation. Please try again." });
+  }
+});
+
 // 4. Secure Clinician Login Endpoint with Lockout Guard
 app.post("/api/auth/clinician/login", rateLimiter("clinicianLogin", 5, 1 * 60 * 1000, "Too many login attempts. Please wait."), async (req, res) => {
   const { mdcn_folio, pin } = req.body;
